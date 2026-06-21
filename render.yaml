@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: pluxee-dashboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: PLUXEE_NIF
+        sync: false  # Set manually in Render dashboard
+      - key: PLUXEE_PASSWORD
+        sync: false
+      - key: NTFY_TOPIC
+        value: pluxee-tiago-a7x9k2
+      - key: CRON_SECRET
+        generateValue: true  # Auto-generate a random secret for cron protection
+    healthCheckPath: /ping
