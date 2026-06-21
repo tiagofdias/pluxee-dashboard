@@ -208,6 +208,7 @@ def notification_status():
     interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
     has_creds = bool(_get_env("PLUXEE_NIF") and _get_env("PLUXEE_PASSWORD"))
     has_token = bool(os.getenv("NTFY_TOKEN"))
+    has_telegram = bool(os.getenv("TELEGRAM_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"))
 
     # Read last few log lines
     last_log = ""
@@ -235,6 +236,7 @@ def notification_status():
         "interval": interval,
         "has_credentials": has_creds,
         "has_token": has_token,
+        "has_telegram": has_telegram,
         "is_render": IS_RENDER,
         "last_check": state.get("last_check") if state else None,
         "last_log": last_log,

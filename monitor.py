@@ -129,8 +129,42 @@ def fmt_eur(val):
     return f"{sign}€{formatted}" if val >= 0 else f"-€{formatted}"
 
 
+def send_telegram(token, chat_id, title, message):
+    """Send a push notification via Telegram Bot API."""
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    # Format message with bold title
+    text = f"<b>{title}</b>\n\n{message}"
+    try:
+        r = requests.post(
+            url,
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML"
+            },
+            timeout=10
+        )
+        if r.status_code == 200:
+            log.info(f"Telegram notification sent: {title}")
+            return True
+        else:
+            log.warning(f"Telegram responded with status {r.status_code}: {r.text}")
+            return False
+    except Exception as e:
+        log.error(f"Failed to send Telegram notification: {e}")
+        return False
+
+
 def send_notification(topic, title, message, tags=None, priority=None):
-    """Send a push notification via ntfy.sh using the JSON API."""
+    """Send a push notification via ntfy.sh and/or Telegram."""
+    # 1. Try sending via Telegram if credentials are set
+    tg_token = os.getenv("TELEGRAM_TOKEN", "").strip()
+    tg_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    tg_success = False
+    if tg_token and tg_chat_id:
+        tg_success = send_telegram(tg_token, tg_chat_id, title, message)
+
+    # 2. Try sending via ntfy
     url = f"{NTFY_URL}"
     payload = {
         "topic": topic,
@@ -147,20 +181,23 @@ def send_notification(topic, title, message, tags=None, priority=None):
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
+    ntfy_success = False
     try:
         r = requests.post(
             url,
             json=payload,
             headers=headers,
+            timeout=10
         )
         if r.status_code == 200:
-            log.info(f"Notification sent: {title}")
+            log.info(f"ntfy notification sent: {title}")
+            ntfy_success = True
         else:
             log.warning(f"ntfy responded with status {r.status_code}: {r.text}")
-        return r.status_code == 200
     except Exception as e:
-        log.error(f"Failed to send notification: {e}")
-        return False
+        log.error(f"Failed to send ntfy notification: {e}")
+
+    return tg_success or ntfy_success
 
 
 def notify_transaction(topic, tx, balance):

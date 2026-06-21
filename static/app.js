@@ -276,8 +276,13 @@
       // Render environment (cron-driven)
       if (data.has_credentials) {
         notifStatusDot.className = "notif-status-dot active";
-        notifStatusLabel.textContent = "Ativo (Render)";
-        notifSubtitle.textContent = "Monitorização gerida por Cron";
+        if (data.has_telegram) {
+          notifStatusLabel.textContent = "Ativo (Telegram)";
+          notifSubtitle.textContent = "Notificações via Telegram Bot";
+        } else {
+          notifStatusLabel.textContent = "Ativo (Render)";
+          notifSubtitle.textContent = "Monitorização gerida por Cron";
+        }
         notifToggleLabel.textContent = "Verificar Agora";
         notifBtnPlay.classList.remove("hidden");
         notifBtnStop.classList.add("hidden");
