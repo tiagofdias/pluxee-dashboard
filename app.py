@@ -207,6 +207,7 @@ def notification_status():
     topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
     interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
     has_creds = bool(_get_env("PLUXEE_NIF") and _get_env("PLUXEE_PASSWORD"))
+    has_token = bool(os.getenv("NTFY_TOKEN"))
 
     # Read last few log lines
     last_log = ""
@@ -233,6 +234,7 @@ def notification_status():
         "topic": topic,
         "interval": interval,
         "has_credentials": has_creds,
+        "has_token": has_token,
         "is_render": IS_RENDER,
         "last_check": state.get("last_check") if state else None,
         "last_log": last_log,
