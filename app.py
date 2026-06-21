@@ -2,6 +2,7 @@
 
 Uses the shared pluxee_scraper module for portal scraping.
 Includes API endpoints for the notification monitor control.
+Works both locally (with .env file) and on Render (with dashboard env vars).
 """
 
 import os
@@ -10,6 +11,8 @@ import json
 import signal
 import subprocess
 import traceback
+from datetime import datetime, timezone
+
 import requests
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, request, send_from_directory
@@ -22,16 +25,95 @@ CORS(app)
 
 BASE_URL = "https://portal.admin.pluxee.pt"
 DEBUG_DIR = os.path.join(os.path.dirname(__file__), "debug")
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+MONITOR_SCRIPT = os.path.join(os.path.dirname(__file__), "monitor.py")
+IS_RENDER = bool(os.getenv("RENDER"))
+
+# Data directory — use /tmp on Render (ephemeral but writable)
+if IS_RENDER:
+    DATA_DIR = "/tmp/pluxee-data"
+else:
+    DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+
+os.makedirs(DATA_DIR, exist_ok=True)
+
 PID_FILE = os.path.join(DATA_DIR, "monitor.pid")
 LOG_FILE = os.path.join(DATA_DIR, "monitor.log")
-MONITOR_SCRIPT = os.path.join(os.path.dirname(__file__), "monitor.py")
+STATE_FILE = os.path.join(DATA_DIR, "transactions.json")
 
+
+# ===========================================================================
+# Config helpers — works with both .env files AND os.getenv()
+# ===========================================================================
+
+def _get_env(key, default=""):
+    """Get a config value: checks os.getenv() first, then .env file."""
+    # os.getenv() covers Render dashboard vars + real environment
+    val = os.getenv(key, "").strip()
+    if val:
+        return val
+
+    # Fallback: try .env file (local dev)
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, _, v = line.partition("=")
+                        if k.strip() == key:
+                            return v.strip()
+        except IOError:
+            pass
+
+    return default
+
+
+def _save_env(env_vars):
+    """Save env vars to .env file (local dev only, no-op on Render)."""
+    if IS_RENDER:
+        return  # On Render, env vars are managed via the dashboard
+
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    lines = []
+    existing_keys = set()
+
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    key = stripped.split("=", 1)[0].strip()
+                    if key in env_vars:
+                        lines.append(f"{key}={env_vars[key]}\n")
+                        existing_keys.add(key)
+                    else:
+                        lines.append(line)
+                else:
+                    lines.append(line)
+
+    for key, value in env_vars.items():
+        if key not in existing_keys:
+            lines.append(f"{key}={value}\n")
+
+    with open(env_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
+# ===========================================================================
+# Routes
+# ===========================================================================
 
 @app.route("/")
 def index():
     """Serve the main dashboard page."""
     return send_from_directory("static", "index.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    """Return empty favicon to avoid 404."""
+    return "", 204
 
 
 @app.route("/api/balance", methods=["POST"])
@@ -109,7 +191,6 @@ def _is_monitor_running():
         os.kill(pid, 0)
         return True
     except OSError:
-        # Process doesn't exist — clean up stale PID file
         try:
             os.remove(PID_FILE)
         except OSError:
@@ -117,56 +198,15 @@ def _is_monitor_running():
         return False
 
 
-def _load_env():
-    """Load the .env file as a dict."""
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
-    env_vars = {}
-    if os.path.exists(env_path):
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, value = line.partition("=")
-                    env_vars[key.strip()] = value.strip()
-    return env_vars
-
-
-def _save_env(env_vars):
-    """Save env vars to the .env file (preserves comments)."""
-    env_path = os.path.join(os.path.dirname(__file__), ".env")
-    lines = []
-    existing_keys = set()
-
-    # Read existing file to preserve structure & comments
-    if os.path.exists(env_path):
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped and not stripped.startswith("#") and "=" in stripped:
-                    key = stripped.split("=", 1)[0].strip()
-                    if key in env_vars:
-                        lines.append(f"{key}={env_vars[key]}\n")
-                        existing_keys.add(key)
-                    else:
-                        lines.append(line)
-                else:
-                    lines.append(line)
-
-    # Add new keys not in the file
-    for key, value in env_vars.items():
-        if key not in existing_keys:
-            lines.append(f"{key}={value}\n")
-
-    with open(env_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
-
-
 @app.route("/api/notifications/status", methods=["GET"])
 def notification_status():
     """Check the current notification monitor status."""
     running = _is_monitor_running()
     pid = _read_pid() if running else None
-    env = _load_env()
+
+    topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
+    interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
+    has_creds = bool(_get_env("PLUXEE_NIF") and _get_env("PLUXEE_PASSWORD"))
 
     # Read last few log lines
     last_log = ""
@@ -180,10 +220,9 @@ def notification_status():
 
     # Read last state
     state = None
-    state_file = os.path.join(DATA_DIR, "transactions.json")
-    if os.path.exists(state_file):
+    if os.path.exists(STATE_FILE):
         try:
-            with open(state_file, "r", encoding="utf-8") as f:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
                 state = json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
@@ -191,9 +230,10 @@ def notification_status():
     return jsonify({
         "running": running,
         "pid": pid,
-        "topic": env.get("NTFY_TOPIC", "pluxee-tiago-a7x9k2"),
-        "interval": int(env.get("POLL_INTERVAL_SECONDS", 300)),
-        "has_credentials": bool(env.get("PLUXEE_NIF") and env.get("PLUXEE_PASSWORD")),
+        "topic": topic,
+        "interval": interval,
+        "has_credentials": has_creds,
+        "is_render": IS_RENDER,
         "last_check": state.get("last_check") if state else None,
         "last_log": last_log,
     })
@@ -201,69 +241,93 @@ def notification_status():
 
 @app.route("/api/notifications/start", methods=["POST"])
 def notification_start():
-    """Start the background monitor."""
-    if _is_monitor_running():
-        return jsonify({"error": "Monitor is already running", "running": True}), 409
+    """Start the background monitor.
 
+    On Render: triggers a single cron check immediately (cron-job.org handles the loop).
+    Locally: starts monitor.py as a background subprocess.
+    """
     data = request.get_json() or {}
 
-    # Save credentials to .env if provided
-    nif = data.get("nif", "").strip()
-    password = data.get("password", "").strip()
-    topic = data.get("topic", "pluxee-tiago-a7x9k2").strip()
-    interval = data.get("interval", 300)
+    nif = data.get("nif", "").strip() or _get_env("PLUXEE_NIF")
+    password = data.get("password", "").strip() or _get_env("PLUXEE_PASSWORD")
+    topic = data.get("topic", "").strip() or _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
 
-    if nif and password:
+    if not nif or not password:
+        return jsonify({"error": "Credentials required. Set PLUXEE_NIF and PLUXEE_PASSWORD."}), 400
+
+    if IS_RENDER:
+        # On Render: run one check now, cron-job.org handles the rest
+        try:
+            from monitor import check_for_new_transactions
+            config = {
+                "nif": nif,
+                "password": password,
+                "topic": topic,
+                "interval": 300,
+            }
+            count, balance = check_for_new_transactions(config)
+            total = sum(balance.values()) if balance else 0
+            return jsonify({
+                "success": True,
+                "running": True,
+                "mode": "cron",
+                "new_transactions": count,
+                "balance": total,
+                "topic": topic,
+            })
+        except Exception as e:
+            traceback.print_exc()
+            return jsonify({"error": f"Check failed: {str(e)}"}), 500
+    else:
+        # Local: save to .env and start subprocess
+        if _is_monitor_running():
+            return jsonify({"error": "Monitor is already running", "running": True}), 409
+
         _save_env({
             "PLUXEE_NIF": nif,
             "PLUXEE_PASSWORD": password,
             "NTFY_TOPIC": topic,
-            "POLL_INTERVAL_SECONDS": str(interval),
+            "POLL_INTERVAL_SECONDS": str(data.get("interval", 300)),
         })
-    else:
-        # Check if credentials exist
-        env = _load_env()
-        if not env.get("PLUXEE_NIF") or not env.get("PLUXEE_PASSWORD"):
-            return jsonify({"error": "Credentials required. Provide nif and password."}), 400
 
-    # Start the monitor as a background process
-    try:
-        import sys
-        python = sys.executable
-        proc = subprocess.Popen(
-            [python, MONITOR_SCRIPT],
-            cwd=os.path.dirname(__file__),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        # Give it a moment to start
-        import time
-        time.sleep(1)
+        try:
+            import sys
+            import time
+            proc = subprocess.Popen(
+                [sys.executable, MONITOR_SCRIPT],
+                cwd=os.path.dirname(__file__),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            time.sleep(1)
+            if proc.poll() is not None:
+                return jsonify({"error": "Monitor process exited immediately. Check logs."}), 500
 
-        if proc.poll() is not None:
-            return jsonify({"error": "Monitor process exited immediately. Check logs."}), 500
-
-        return jsonify({
-            "success": True,
-            "running": True,
-            "pid": proc.pid,
-            "topic": topic,
-        })
-    except Exception as e:
-        return jsonify({"error": f"Failed to start monitor: {str(e)}"}), 500
+            return jsonify({
+                "success": True,
+                "running": True,
+                "mode": "subprocess",
+                "pid": proc.pid,
+                "topic": topic,
+            })
+        except Exception as e:
+            return jsonify({"error": f"Failed to start monitor: {str(e)}"}), 500
 
 
 @app.route("/api/notifications/stop", methods=["POST"])
 def notification_stop():
     """Stop the background monitor."""
+    if IS_RENDER:
+        return jsonify({"success": True, "running": False,
+                        "message": "On Render, monitoring is handled by cron-job.org"})
+
     pid = _read_pid()
     if not pid or not _is_monitor_running():
         return jsonify({"success": True, "running": False, "message": "Monitor was not running"})
 
     try:
         os.kill(pid, signal.SIGTERM)
-        # Wait briefly for it to stop
         import time
         for _ in range(10):
             time.sleep(0.5)
@@ -278,23 +342,20 @@ def notification_stop():
 def notification_test():
     """Send a test notification."""
     data = request.get_json() or {}
-    topic = data.get("topic", "").strip()
-
-    if not topic:
-        env = _load_env()
-        topic = env.get("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
+    topic = data.get("topic", "").strip() or _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
 
     try:
         from monitor import send_test_notification
         send_test_notification(topic)
         return jsonify({"success": True, "topic": topic})
     except Exception as e:
+        traceback.print_exc()
         return jsonify({"error": f"Failed to send test notification: {str(e)}"}), 500
 
 
 @app.route("/api/notifications/config", methods=["POST"])
 def notification_config():
-    """Update notification configuration."""
+    """Update notification configuration (local only)."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON data provided"}), 400
@@ -322,15 +383,14 @@ def notification_config():
 @app.route("/ping", methods=["GET"])
 def ping():
     """Health check endpoint — use with external cron to keep Render alive."""
-    return jsonify({"status": "ok", "timestamp": __import__("datetime").datetime.utcnow().isoformat()})
+    return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 
 @app.route("/api/cron/check", methods=["GET", "POST"])
 def cron_check():
     """Endpoint for external cron services to trigger a transaction check.
 
-    This replaces the need for a persistent background monitor process.
-    Set up an external cron (e.g. cron-job.org) to hit this every 5 minutes.
+    Set up cron-job.org to hit this every 5 minutes.
     Optionally protect with a secret: ?secret=YOUR_CRON_SECRET
     """
     # Optional secret protection
@@ -340,10 +400,9 @@ def cron_check():
         if provided != cron_secret:
             return jsonify({"error": "Invalid secret"}), 403
 
-    # Load credentials from environment
-    nif = os.getenv("PLUXEE_NIF", "").strip()
-    password = os.getenv("PLUXEE_PASSWORD", "").strip()
-    topic = os.getenv("NTFY_TOPIC", "pluxee-tiago-a7x9k2").strip()
+    nif = _get_env("PLUXEE_NIF")
+    password = _get_env("PLUXEE_PASSWORD")
+    topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
 
     if not nif or not password:
         return jsonify({"error": "PLUXEE_NIF and PLUXEE_PASSWORD not configured"}), 500
@@ -363,12 +422,12 @@ def cron_check():
             "success": True,
             "new_transactions": count,
             "balance": total,
-            "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
     except Exception as e:
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
-

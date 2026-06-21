@@ -264,40 +264,65 @@
   var notifTestBtn     = $("notif-test-btn");
   var notifPollTimer   = null;
   var _monitorRunning  = false;
+  var _isRender        = false;
   var _savedNif        = "";
   var _savedPw         = "";
 
   function updateNotifUI(data) {
     _monitorRunning = data.running;
+    _isRender = !!data.is_render;
 
-    // Status dot & label
-    if (data.running) {
-      notifStatusDot.className = "notif-status-dot active";
-      notifStatusLabel.textContent = "Ativo";
-      notifSubtitle.textContent = "A monitorizar transações";
-      notifToggleLabel.textContent = "Parar Monitor";
-      notifBtnPlay.classList.add("hidden");
-      notifBtnStop.classList.remove("hidden");
-      notifToggleBtn.classList.add("is-running");
+    if (_isRender) {
+      // Render environment (cron-driven)
+      if (data.has_credentials) {
+        notifStatusDot.className = "notif-status-dot active";
+        notifStatusLabel.textContent = "Ativo (Render)";
+        notifSubtitle.textContent = "Monitorização gerida por Cron";
+        notifToggleLabel.textContent = "Verificar Agora";
+        notifBtnPlay.classList.remove("hidden");
+        notifBtnStop.classList.add("hidden");
+        notifToggleBtn.classList.remove("is-running");
+        notifIntervalVal.textContent = "Externo (Cron)";
+      } else {
+        notifStatusDot.className = "notif-status-dot";
+        notifStatusLabel.textContent = "Sem credenciais";
+        notifSubtitle.textContent = "Configure credenciais no painel do Render";
+        notifToggleLabel.textContent = "Verificar Agora";
+        notifBtnPlay.classList.remove("hidden");
+        notifBtnStop.classList.add("hidden");
+        notifToggleBtn.classList.remove("is-running");
+        notifIntervalVal.textContent = "—";
+      }
     } else {
-      notifStatusDot.className = "notif-status-dot";
-      notifStatusLabel.textContent = "Parado";
-      notifSubtitle.textContent = "Receba alertas no telemóvel";
-      notifToggleLabel.textContent = "Iniciar Monitor";
-      notifBtnPlay.classList.remove("hidden");
-      notifBtnStop.classList.add("hidden");
-      notifToggleBtn.classList.remove("is-running");
+      // Local environment (subprocess-driven)
+      if (data.running) {
+        notifStatusDot.className = "notif-status-dot active";
+        notifStatusLabel.textContent = "Ativo";
+        notifSubtitle.textContent = "A monitorizar transações";
+        notifToggleLabel.textContent = "Parar Monitor";
+        notifBtnPlay.classList.add("hidden");
+        notifBtnStop.classList.remove("hidden");
+        notifToggleBtn.classList.add("is-running");
+      } else {
+        notifStatusDot.className = "notif-status-dot";
+        notifStatusLabel.textContent = "Parado";
+        notifSubtitle.textContent = "Receba alertas no telemóvel";
+        notifToggleLabel.textContent = "Iniciar Monitor";
+        notifBtnPlay.classList.remove("hidden");
+        notifBtnStop.classList.add("hidden");
+        notifToggleBtn.classList.remove("is-running");
+      }
+
+      // Interval
+      if (data.interval) {
+        var mins = Math.round(data.interval / 60);
+        notifIntervalVal.textContent = mins + " min";
+      }
     }
 
     // Topic
     if (data.topic) {
       notifTopicName.textContent = data.topic;
-    }
-
-    // Interval
-    if (data.interval) {
-      var mins = Math.round(data.interval / 60);
-      notifIntervalVal.textContent = mins + " min";
     }
 
     // Last check
@@ -336,8 +361,8 @@
   notifToggleBtn.addEventListener("click", function () {
     notifToggleBtn.disabled = true;
 
-    if (_monitorRunning) {
-      // Stop
+    if (!_isRender && _monitorRunning) {
+      // Stop (only local)
       fetch("/api/notifications/stop", { method: "POST" })
         .then(function (r) { return r.json(); })
         .then(function (data) {
@@ -348,7 +373,7 @@
           notifToggleBtn.disabled = false;
         });
     } else {
-      // Start — send credentials
+      // Start (local) or Check Now (Render)
       var body = {
         nif: _savedNif || usernameIn.value.trim(),
         password: _savedPw || passwordIn.value,
@@ -363,14 +388,19 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.success) {
-            updateNotifUI({ running: true, topic: data.topic });
+            if (_isRender) {
+              alert("Verificação manual concluída com sucesso! Novas transações: " + (data.new_transactions || 0));
+              fetchNotifStatus();
+            } else {
+              updateNotifUI({ running: true, topic: data.topic, interval: data.interval });
+            }
           } else {
-            alert(data.error || "Failed to start monitor");
+            alert(data.error || "Erro ao iniciar o monitor");
           }
           notifToggleBtn.disabled = false;
         })
         .catch(function () {
-          alert("Network error starting monitor");
+          alert("Erro de rede ao ligar ao monitor");
           notifToggleBtn.disabled = false;
         });
     }
