@@ -142,11 +142,16 @@ def send_notification(topic, title, message, tags=None, priority=None):
     if priority:
         payload["priority"] = 3  # default priority
 
+    headers = {"Content-Type": "application/json"}
+    token = os.getenv("NTFY_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
         r = requests.post(
             url,
             json=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         if r.status_code == 200:
             log.info(f"Notification sent: {title}")
