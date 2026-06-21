@@ -38,6 +38,7 @@ else:
     DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
 STATE_FILE = os.path.join(DATA_DIR, "transactions.json")
+OUTAGE_FILE = os.path.join(DATA_DIR, "outage_state.json")
 PID_FILE = os.path.join(DATA_DIR, "monitor.pid")
 LOG_FILE = os.path.join(DATA_DIR, "monitor.log")
 NTFY_URL = "https://ntfy.sh"
@@ -117,6 +118,78 @@ def _tx_fingerprint(tx):
     """Create a unique fingerprint for a transaction."""
     raw = f"{tx['date']}|{tx['description']}|{tx['amount']}"
     return hashlib.md5(raw.encode()).hexdigest()
+
+# ---------------------------------------------------------------------------
+# Outage detection
+# ---------------------------------------------------------------------------
+
+def _looks_like_outage(current_balance, current_txs, prev_state):
+    """Detect if the API response looks like a system outage rather than real data.
+
+    When Pluxee goes down, the portal returns an empty page with 0 balance
+    and 0 transactions. We detect this by comparing against our last known
+    good state: if we previously had transactions and balance but now
+    everything is gone, it's almost certainly an outage.
+    """
+    if prev_state is None:
+        return False  # First run, can't detect outage
+
+    prev_txs = prev_state.get("transactions", [])
+    prev_balance = prev_state.get("balance", {})
+    prev_total = sum(prev_balance.values())
+    current_total = sum(current_balance.values())
+
+    # If we previously had transactions and balance, but now we get nothing,
+    # this is almost certainly an outage, not real activity
+    if prev_txs and prev_total > 0 and len(current_txs) == 0 and current_total == 0:
+        return True
+
+    # If balance suddenly drops to exactly 0 AND all transactions vanished
+    if prev_total > 1.0 and current_total == 0 and len(current_txs) == 0:
+        return True
+
+    return False
+
+
+def _load_outage_state():
+    """Load the outage tracking state from disk. Returns None if not in outage."""
+    if not os.path.exists(OUTAGE_FILE):
+        return None
+    try:
+        with open(OUTAGE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def _save_outage_state(prev_balance):
+    """Save outage state to disk. Called once when an outage is first detected."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    state = {
+        "detected_at": datetime.now(timezone.utc).isoformat(),
+        "notification_sent": False,
+        "last_good_balance": prev_balance,
+    }
+    with open(OUTAGE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+    return state
+
+
+def _mark_outage_notified():
+    """Mark that the outage notification has already been sent."""
+    outage = _load_outage_state()
+    if outage:
+        outage["notification_sent"] = True
+        with open(OUTAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(outage, f, indent=2, ensure_ascii=False)
+
+
+def _clear_outage_state():
+    """Remove the outage file, signalling recovery."""
+    try:
+        os.remove(OUTAGE_FILE)
+    except OSError:
+        pass
 
 # ---------------------------------------------------------------------------
 # Notification
@@ -293,6 +366,10 @@ def is_monitor_running():
 def check_for_new_transactions(config):
     """Check Pluxee for new transactions and send notifications for any found.
 
+    Includes outage detection: if the API returns empty data when we previously
+    had transactions and balance, we assume the system is down and skip all
+    notifications and state updates to prevent false alarms and recovery spam.
+
     Returns (new_count, balance) tuple.
     """
     log.info("Checking for new transactions...")
@@ -323,6 +400,63 @@ def check_for_new_transactions(config):
         log.info("First run — saving initial state (no notifications sent)")
         save_state(current_balance, current_txs)
         return 0, current_balance
+
+    # ----- Outage detection -----
+    outage_state = _load_outage_state()
+
+    if _looks_like_outage(current_balance, current_txs, prev_state):
+        # API appears to be down — don't save state, don't notify about changes
+        if outage_state is None:
+            # First detection of this outage
+            prev_balance = prev_state.get("balance", {})
+            outage_state = _save_outage_state(prev_balance)
+            log.warning("⚠️  Outage detected! API returned empty data. "
+                        "Skipping state update to prevent false notifications.")
+            # Send a single "system down" notification
+            prev_total = sum(prev_balance.values())
+            send_notification(
+                topic=config["topic"],
+                title="⚠️ Pluxee — Sistema indisponível",
+                message=(
+                    f"O sistema Pluxee parece estar em baixo.\n"
+                    f"Dados devolvidos sem saldo e sem transações.\n"
+                    f"\n"
+                    f"As notificações estão pausadas até o sistema recuperar.\n"
+                    f"💰 Último saldo conhecido: {fmt_eur(prev_total)}"
+                ),
+                tags="warning",
+            )
+            _mark_outage_notified()
+        else:
+            log.warning("⚠️  Outage still ongoing. Skipping check. "
+                        f"(down since {outage_state.get('detected_at', 'unknown')})")
+        return 0, None
+
+    # ----- Recovery from outage -----
+    if outage_state is not None:
+        # System is back! We have real data again.
+        detected_at = outage_state.get("detected_at", "unknown")
+        log.info(f"✅ System recovered! Outage started at {detected_at}. "
+                 "Reconciling state silently.")
+        _clear_outage_state()
+        # Send a single "recovered" notification
+        send_notification(
+            topic=config["topic"],
+            title="✅ Pluxee — Sistema recuperado",
+            message=(
+                f"O sistema Pluxee está novamente operacional.\n"
+                f"\n"
+                f"💰 Saldo atual: {fmt_eur(total)}"
+            ),
+            tags="white_check_mark",
+        )
+        # Save the current (recovered) state without sending per-transaction
+        # notifications — the transactions aren't truly "new", they just
+        # reappeared after the outage.
+        save_state(current_balance, current_txs)
+        return 0, current_balance
+
+    # ----- Normal flow (no outage) -----
 
     # Compare transactions by fingerprint
     prev_fingerprints = set(
