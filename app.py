@@ -216,7 +216,7 @@ def notification_status():
         try:
             with open(LOG_FILE, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-                last_log = "".join(lines[-5:]) if lines else ""
+                last_log = "".join(lines[-30:]) if lines else ""
         except IOError:
             pass
 
