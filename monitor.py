@@ -41,6 +41,7 @@ STATE_FILE = os.path.join(DATA_DIR, "transactions.json")
 OUTAGE_FILE = os.path.join(DATA_DIR, "outage_state.json")
 PID_FILE = os.path.join(DATA_DIR, "monitor.pid")
 LOG_FILE = os.path.join(DATA_DIR, "monitor.log")
+STATE_MARKER = "📊 PLUXEE_MONITOR_STATE"
 NTFY_URL = "https://ntfy.sh"
 
 # ---------------------------------------------------------------------------
@@ -92,32 +93,164 @@ def load_config():
 # ---------------------------------------------------------------------------
 
 def load_state():
-    """Load the last-known state from disk."""
-    if not os.path.exists(STATE_FILE):
-        return None
-    try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
-        return None
+    """Load the last-known state from disk, falling back to Telegram."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    # Local file missing (e.g. Render restart wiped /tmp) — try Telegram
+    return _telegram_load_state()
 
 
 def save_state(balance, transactions):
-    """Persist the current state to disk."""
+    """Persist the current state to disk and back up to Telegram."""
     os.makedirs(DATA_DIR, exist_ok=True)
+    fingerprints = [_tx_fingerprint(tx) for tx in transactions]
     state = {
         "last_check": datetime.now(timezone.utc).isoformat(),
         "balance": balance,
         "transactions": transactions,
+        "fingerprints": fingerprints,
+        "tx_count": len(transactions),
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
+
+    # Backup to Telegram pinned message (survives Render restarts)
+    _telegram_save_state(balance, fingerprints, len(transactions))
 
 
 def _tx_fingerprint(tx):
     """Create a unique fingerprint for a transaction."""
     raw = f"{tx['date']}|{tx['description']}|{tx['amount']}"
     return hashlib.md5(raw.encode()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Telegram state persistence (survives Render /tmp wipes)
+# ---------------------------------------------------------------------------
+
+def _telegram_get_credentials():
+    """Get Telegram bot credentials from environment."""
+    token = os.getenv("TELEGRAM_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if token and chat_id:
+        return token, chat_id
+    return None, None
+
+
+def _telegram_save_state(balance, fingerprints, tx_count):
+    """Save state to a Telegram pinned message as backup.
+
+    Edits the existing pinned message if it belongs to us, otherwise sends
+    a new one and pins it silently.
+    """
+    token, chat_id = _telegram_get_credentials()
+    if not token or not chat_id:
+        return
+
+    compact = {
+        "lc": datetime.now(timezone.utc).isoformat(),
+        "bal": {
+            "l": balance.get("lunch_pass", 0.0),
+            "e": balance.get("eco_pass", 0.0),
+            "g": balance.get("gift_pass", 0.0),
+            "c": balance.get("conso_pass", 0.0),
+        },
+        "fps": fingerprints,
+        "tc": tx_count,
+    }
+    text = f"{STATE_MARKER}\n{json.dumps(compact, separators=(',', ':'), ensure_ascii=False)}"
+
+    try:
+        # Check for an existing pinned state message to edit in-place
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getChat",
+            params={"chat_id": chat_id},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            pinned = r.json().get("result", {}).get("pinned_message")
+            if pinned and STATE_MARKER in pinned.get("text", ""):
+                msg_id = pinned["message_id"]
+                edit_r = requests.post(
+                    f"https://api.telegram.org/bot{token}/editMessageText",
+                    json={"chat_id": chat_id, "message_id": msg_id, "text": text},
+                    timeout=10,
+                )
+                if edit_r.status_code == 200:
+                    log.info("State backed up to Telegram (edited pinned message)")
+                    return
+                # "message is not modified" is fine — state hasn't changed
+                if edit_r.status_code == 400 and "not modified" in edit_r.text.lower():
+                    return
+
+        # No existing pinned state message or edit failed — send new & pin
+        send_r = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "disable_notification": True},
+            timeout=10,
+        )
+        if send_r.status_code == 200:
+            msg_id = send_r.json()["result"]["message_id"]
+            requests.post(
+                f"https://api.telegram.org/bot{token}/pinChatMessage",
+                json={"chat_id": chat_id, "message_id": msg_id,
+                      "disable_notification": True},
+                timeout=10,
+            )
+            log.info("State backed up to Telegram (new pinned message)")
+    except Exception as e:
+        log.warning(f"Failed to back up state to Telegram: {e}")
+
+
+def _telegram_load_state():
+    """Load state from the Telegram pinned message. Returns state dict or None."""
+    token, chat_id = _telegram_get_credentials()
+    if not token or not chat_id:
+        return None
+
+    try:
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getChat",
+            params={"chat_id": chat_id},
+            timeout=10,
+        )
+        if r.status_code != 200:
+            return None
+
+        pinned = r.json().get("result", {}).get("pinned_message")
+        if not pinned:
+            return None
+
+        text = pinned.get("text", "")
+        if STATE_MARKER not in text:
+            return None
+
+        # JSON sits on the line after the marker
+        json_str = text[text.index(STATE_MARKER) + len(STATE_MARKER):].strip()
+        compact = json.loads(json_str)
+
+        state = {
+            "last_check": compact.get("lc"),
+            "balance": {
+                "lunch_pass": compact.get("bal", {}).get("l", 0.0),
+                "eco_pass": compact.get("bal", {}).get("e", 0.0),
+                "gift_pass": compact.get("bal", {}).get("g", 0.0),
+                "conso_pass": compact.get("bal", {}).get("c", 0.0),
+            },
+            "transactions": [],
+            "fingerprints": compact.get("fps", []),
+            "tx_count": compact.get("tc", 0),
+        }
+        log.info(f"State restored from Telegram (tx_count={state['tx_count']})")
+        return state
+    except Exception as e:
+        log.warning(f"Failed to load state from Telegram: {e}")
+        return None
 
 # ---------------------------------------------------------------------------
 # Outage detection
@@ -134,14 +267,14 @@ def _looks_like_outage(current_balance, current_txs, prev_state):
     if prev_state is None:
         return False  # First run, can't detect outage
 
-    prev_txs = prev_state.get("transactions", [])
+    prev_tx_count = prev_state.get("tx_count", len(prev_state.get("transactions", [])))
     prev_balance = prev_state.get("balance", {})
     prev_total = sum(prev_balance.values())
     current_total = sum(current_balance.values())
 
     # If we previously had transactions and balance, but now we get nothing,
     # this is almost certainly an outage, not real activity
-    if prev_txs and prev_total > 0 and len(current_txs) == 0 and current_total == 0:
+    if prev_tx_count > 0 and prev_total > 0 and len(current_txs) == 0 and current_total == 0:
         return True
 
     # If balance suddenly drops to exactly 0 AND all transactions vanished
@@ -273,10 +406,15 @@ def send_notification(topic, title, message, tags=None, priority=None):
     return tg_success or ntfy_success
 
 
-def notify_transaction(topic, tx, balance):
-    """Send a notification for a single transaction."""
+def notify_transaction(topic, tx, balance_total):
+    """Send a notification for a single transaction.
+
+    Args:
+        topic: ntfy / Telegram topic
+        tx: transaction dict with amount, description
+        balance_total: running balance AFTER this transaction (float)
+    """
     is_credit = tx["amount"] > 0
-    total = sum(balance.values())
 
     if is_credit:
         emoji = "green_circle"
@@ -286,7 +424,7 @@ def notify_transaction(topic, tx, balance):
         title = "Pluxee — Gasto"
 
     amount_str = fmt_eur(tx["amount"])
-    total_str = fmt_eur(total)
+    total_str = fmt_eur(balance_total)
 
     message = (
         f"{tx['description']}\n"
@@ -300,7 +438,7 @@ def notify_transaction(topic, tx, balance):
         title=title,
         message=message,
         tags=emoji,
-        priority="default" if is_credit else "default",
+        priority="default",
     )
 
 
@@ -459,9 +597,12 @@ def check_for_new_transactions(config):
     # ----- Normal flow (no outage) -----
 
     # Compare transactions by fingerprint
-    prev_fingerprints = set(
-        _tx_fingerprint(tx) for tx in prev_state.get("transactions", [])
-    )
+    if "fingerprints" in prev_state:
+        prev_fingerprints = set(prev_state["fingerprints"])
+    else:
+        prev_fingerprints = set(
+            _tx_fingerprint(tx) for tx in prev_state.get("transactions", [])
+        )
     current_fingerprints = set(_tx_fingerprint(tx) for tx in current_txs)
 
     new_fingerprints = current_fingerprints - prev_fingerprints
@@ -472,8 +613,15 @@ def check_for_new_transactions(config):
 
     if new_txs:
         log.info(f"Found {len(new_txs)} new transaction(s)!")
-        for tx in new_txs:
-            notify_transaction(config["topic"], tx, current_balance)
+        # Process in chronological order (portal usually lists newest first)
+        new_txs_chrono = list(reversed(new_txs))
+        # Compute a running balance so each notification shows the correct
+        # intermediate balance, not the same final balance for all.
+        remaining = sum(tx["amount"] for tx in new_txs_chrono)
+        for tx in new_txs_chrono:
+            remaining -= tx["amount"]
+            balance_after = total - remaining
+            notify_transaction(config["topic"], tx, balance_after)
     else:
         log.info("No new transactions found.")
 
