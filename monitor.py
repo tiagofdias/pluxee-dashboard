@@ -671,6 +671,16 @@ def check_for_new_transactions(config):
     prev_balance = prev_state.get("balance", {})
     prev_total = sum(prev_balance.values())
     if abs(total - prev_total) > 0.01 and not new_txs:
+        # Guard: balance dropping to exactly €0 with no new transactions is
+        # almost certainly a partial portal outage (stale transactions
+        # returned with a broken balance), not a real balance change.
+        if total == 0 and prev_total > 1.0:
+            log.warning(
+                "Balance dropped to €0,00 with no new transactions — "
+                "likely a portal glitch. Skipping notification and state save."
+            )
+            return 0, None
+
         diff = total - prev_total
         direction = "subiu" if diff > 0 else "desceu"
         send_notification(
