@@ -16,6 +16,7 @@ import json
 import time
 import signal
 import hashlib
+import io
 import argparse
 import logging
 from datetime import datetime, timezone
@@ -143,10 +144,11 @@ def _telegram_get_credentials():
 
 
 def _telegram_save_state(balance, fingerprints, tx_count):
-    """Save state to a Telegram pinned message as backup.
+    """Save state as a pinned document in Telegram.
 
-    Edits the existing pinned message if it belongs to us, otherwise sends
-    a new one and pins it silently.
+    Sends the state as a .json file attachment with a clean human-readable
+    caption (no raw JSON visible in chat). Replaces any previous state
+    message automatically.
     """
     token, chat_id = _telegram_get_credentials()
     if not token or not chat_id:
@@ -163,10 +165,17 @@ def _telegram_save_state(balance, fingerprints, tx_count):
         "fps": fingerprints,
         "tc": tx_count,
     }
-    text = f"{STATE_MARKER}\n{json.dumps(compact, separators=(',', ':'), ensure_ascii=False)}"
+    json_bytes = json.dumps(compact, separators=(',', ':'), ensure_ascii=False).encode("utf-8")
+
+    total = sum(balance.values())
+    sign = "+" if total >= 0 else "-"
+    formatted = f"{abs(total):,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
+    total_str = f"{sign}\u20ac{formatted}"
+    caption = f"{STATE_MARKER}\n\ud83d\udcb0 Saldo: {total_str} | {tx_count} transa\u00e7\u00f5es"
 
     try:
-        # Check for an existing pinned state message to edit in-place
+        # Find existing pinned state message (text or document) to replace
+        old_msg_id = None
         r = requests.get(
             f"https://api.telegram.org/bot{token}/getChat",
             params={"chat_id": chat_id},
@@ -174,41 +183,53 @@ def _telegram_save_state(balance, fingerprints, tx_count):
         )
         if r.status_code == 200:
             pinned = r.json().get("result", {}).get("pinned_message")
-            if pinned and STATE_MARKER in pinned.get("text", ""):
-                msg_id = pinned["message_id"]
-                edit_r = requests.post(
-                    f"https://api.telegram.org/bot{token}/editMessageText",
-                    json={"chat_id": chat_id, "message_id": msg_id, "text": text},
-                    timeout=10,
-                )
-                if edit_r.status_code == 200:
-                    log.info("State backed up to Telegram (edited pinned message)")
-                    return
-                # "message is not modified" is fine — state hasn't changed
-                if edit_r.status_code == 400 and "not modified" in edit_r.text.lower():
-                    return
+            if pinned:
+                # Match our marker in either caption (new) or text (old)
+                msg_text = pinned.get("caption", "") or pinned.get("text", "")
+                if STATE_MARKER in msg_text:
+                    old_msg_id = pinned["message_id"]
 
-        # No existing pinned state message or edit failed — send new & pin
+        # Send state as a document attachment
+        file_obj = io.BytesIO(json_bytes)
         send_r = requests.post(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": text, "disable_notification": True},
-            timeout=10,
+            f"https://api.telegram.org/bot{token}/sendDocument",
+            data={
+                "chat_id": chat_id,
+                "caption": caption,
+                "disable_notification": "true",
+            },
+            files={"document": ("pluxee_state.json", file_obj, "application/json")},
+            timeout=15,
         )
         if send_r.status_code == 200:
-            msg_id = send_r.json()["result"]["message_id"]
+            new_msg_id = send_r.json()["result"]["message_id"]
+            # Pin the new message silently
             requests.post(
                 f"https://api.telegram.org/bot{token}/pinChatMessage",
-                json={"chat_id": chat_id, "message_id": msg_id,
+                json={"chat_id": chat_id, "message_id": new_msg_id,
                       "disable_notification": True},
                 timeout=10,
             )
-            log.info("State backed up to Telegram (new pinned message)")
+            # Delete the old state message to keep the chat clean
+            if old_msg_id:
+                requests.post(
+                    f"https://api.telegram.org/bot{token}/deleteMessage",
+                    json={"chat_id": chat_id, "message_id": old_msg_id},
+                    timeout=10,
+                )
+            log.info("State backed up to Telegram (pinned document)")
+        else:
+            log.warning(f"Telegram sendDocument failed: {send_r.status_code} {send_r.text}")
     except Exception as e:
         log.warning(f"Failed to back up state to Telegram: {e}")
 
 
 def _telegram_load_state():
-    """Load state from the Telegram pinned message. Returns state dict or None."""
+    """Load state from the Telegram pinned message.
+
+    Supports both the new document-based format and the legacy text-based
+    format for backward compatibility. Returns state dict or None.
+    """
     token, chat_id = _telegram_get_credentials()
     if not token or not chat_id:
         return None
@@ -226,13 +247,34 @@ def _telegram_load_state():
         if not pinned:
             return None
 
-        text = pinned.get("text", "")
-        if STATE_MARKER not in text:
-            return None
-
-        # JSON sits on the line after the marker
-        json_str = text[text.index(STATE_MARKER) + len(STATE_MARKER):].strip()
-        compact = json.loads(json_str)
+        # --- New format: document attachment with caption ---
+        caption = pinned.get("caption", "")
+        if STATE_MARKER in caption and pinned.get("document"):
+            file_id = pinned["document"]["file_id"]
+            # Resolve file path
+            file_r = requests.get(
+                f"https://api.telegram.org/bot{token}/getFile",
+                params={"file_id": file_id},
+                timeout=10,
+            )
+            if file_r.status_code != 200:
+                return None
+            file_path = file_r.json()["result"]["file_path"]
+            # Download the JSON file
+            dl_r = requests.get(
+                f"https://api.telegram.org/file/bot{token}/{file_path}",
+                timeout=10,
+            )
+            if dl_r.status_code != 200:
+                return None
+            compact = dl_r.json()
+        else:
+            # --- Legacy format: raw JSON in message text ---
+            text = pinned.get("text", "")
+            if STATE_MARKER not in text:
+                return None
+            json_str = text[text.index(STATE_MARKER) + len(STATE_MARKER):].strip()
+            compact = json.loads(json_str)
 
         state = {
             "last_check": compact.get("lc"),
