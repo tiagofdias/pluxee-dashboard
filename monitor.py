@@ -219,7 +219,34 @@ def _telegram_save_state(balance, fingerprints, tx_count):
                 )
             log.info("State backed up to Telegram (pinned document)")
         else:
-            log.warning(f"Telegram sendDocument failed: {send_r.status_code} {send_r.text}")
+            log.warning(f"Telegram sendDocument failed: {send_r.status_code} {send_r.text}. "
+                        "Falling back to text-based message.")
+            # Fallback: send as text message
+            text = f"{STATE_MARKER}\n{json.dumps(compact, separators=(',', ':'), ensure_ascii=False)}"
+            fallback_r = requests.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": text, "disable_notification": True},
+                timeout=10,
+            )
+            if fallback_r.status_code == 200:
+                new_msg_id = fallback_r.json()["result"]["message_id"]
+                # Pin the new message
+                requests.post(
+                    f"https://api.telegram.org/bot{token}/pinChatMessage",
+                    json={"chat_id": chat_id, "message_id": new_msg_id,
+                          "disable_notification": True},
+                    timeout=10,
+                )
+                # Delete the old state message
+                if old_msg_id:
+                    requests.post(
+                        f"https://api.telegram.org/bot{token}/deleteMessage",
+                        json={"chat_id": chat_id, "message_id": old_msg_id},
+                        timeout=10,
+                    )
+                log.info("State backed up to Telegram (pinned text fallback)")
+            else:
+                log.error(f"Telegram fallback sendMessage failed: {fallback_r.status_code} {fallback_r.text}")
     except Exception as e:
         log.warning(f"Failed to back up state to Telegram: {e}")
 
