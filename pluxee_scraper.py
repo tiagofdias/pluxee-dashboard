@@ -25,6 +25,8 @@ def _create_session():
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "pt-PT,pt;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
     })
     return session
 
@@ -111,8 +113,14 @@ def login(nif, password):
     if redirect_url.startswith("/"):
         redirect_url = BASE_URL + redirect_url
 
-    # Fetch the dashboard page
-    dash_r = session.get(redirect_url)
+    # Fetch the dashboard page with a cache-buster query parameter
+    import time
+    cache_buster = f"cb={int(time.time() * 1000)}"
+    if "?" in redirect_url:
+        redirect_url_cb = f"{redirect_url}&{cache_buster}"
+    else:
+        redirect_url_cb = f"{redirect_url}?{cache_buster}"
+    dash_r = session.get(redirect_url_cb)
 
     # Save full dashboard HTML for debugging
     os.makedirs(DEBUG_DIR, exist_ok=True)

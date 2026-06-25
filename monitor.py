@@ -106,7 +106,7 @@ def load_state():
     return _telegram_load_state()
 
 
-def save_state(balance, transactions):
+def save_state(balance, transactions, stale_skip_count=0):
     """Persist the current state to disk and back up to Telegram."""
     os.makedirs(DATA_DIR, exist_ok=True)
     fingerprints = [_tx_fingerprint(tx) for tx in transactions]
@@ -116,6 +116,7 @@ def save_state(balance, transactions):
         "transactions": transactions,
         "fingerprints": fingerprints,
         "tx_count": len(transactions),
+        "stale_skip_count": stale_skip_count,
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
@@ -680,23 +681,45 @@ def check_for_new_transactions(config):
         if _tx_fingerprint(tx) in new_fingerprints
     ]
 
+    prev_balance = prev_state.get("balance", {})
+    prev_total = sum(prev_balance.values())
+
+    # Detect if the balance has not updated yet to reflect the new transactions.
+    # If we have new transactions but the balance has not changed, we perform a
+    # quick, short retry loop (sleeping for 5 seconds and recheck via portal/API)
+    # to obtain the updated balance immediately.
+    if new_txs and abs(total - prev_total) < 0.01:
+        log.info("New transactions found, but balance is still stale. Re-checking balance...")
+        for attempt in range(3):
+            # Sleep a bit to allow Pluxee portal to process the update
+            time.sleep(5)
+            try:
+                # Recheck balance using the scraper API
+                fresh_result = fetch_all(config["nif"], config["password"])
+                fresh_balance = fresh_result["balance"]
+                fresh_total = sum(fresh_balance.values())
+                
+                # If balance changed, use it
+                if abs(fresh_total - prev_total) >= 0.01:
+                    log.info(f"Balance updated to €{fresh_total:.2f} on attempt {attempt + 1}.")
+                    current_balance = fresh_balance
+                    total = fresh_total
+                    break
+                log.info(f"Balance is still stale on attempt {attempt + 1}. Retrying in 5s...")
+            except Exception as e:
+                log.warning(f"Re-check attempt {attempt + 1} failed: {e}")
+
     if new_txs:
         log.info(f"Found {len(new_txs)} new transaction(s)!")
         # Process in chronological order (portal usually lists newest first)
         new_txs_chrono = list(reversed(new_txs))
-        # Compute a running balance so each notification shows the correct
-        # intermediate balance, not the same final balance for all.
-        remaining = sum(tx["amount"] for tx in new_txs_chrono)
+        # Use the fetched portal balance directly (no manual sums/subtractions)
         for tx in new_txs_chrono:
-            remaining -= tx["amount"]
-            balance_after = total - remaining
-            notify_transaction(config["topic"], tx, balance_after)
+            notify_transaction(config["topic"], tx, total)
     else:
         log.info("No new transactions found.")
 
     # Also check for balance changes without visible transactions
-    prev_balance = prev_state.get("balance", {})
-    prev_total = sum(prev_balance.values())
     if abs(total - prev_total) > 0.01 and not new_txs:
         # Guard: balance dropping to exactly €0 with no new transactions is
         # almost certainly a partial portal outage (stale transactions
