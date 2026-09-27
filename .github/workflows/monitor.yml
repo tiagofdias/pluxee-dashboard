@@ -2,9 +2,9 @@ name: Pluxee Monitor & GitHub Pages
 
 on:
   schedule:
-    # Run every 15 minutes
-    - cron: '*/15 * * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+    # Run every 15 minutes (off-peak minutes :03, :18, :33, :48 to avoid queue congestion)
+    - cron: '3,18,33,48 * * * *'
+  workflow_dispatch: {} # Allows manual trigger from GitHub Actions tab
   push:
     branches: [ master ]
     paths-ignore:
