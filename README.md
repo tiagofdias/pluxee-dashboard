@@ -68,7 +68,7 @@ Using a network proxy (e.g., [HTTP Toolkit](https://httptoolkit.com/), Charles, 
    * `PLUXEE_BENEFIT_ID`
    * `TELEGRAM_TOKEN`
    * `TELEGRAM_CHAT_ID`
-   * `NTFY_TOPIC` (optional, e.g. `pluxee-tiago-a7x9k2`)
+   * `NTFY_TOPIC` *(Optional — only if you also use the ntfy.sh app)*
 3. Go to **Settings** > **Pages**:
    * Set **Source** to **GitHub Actions**.
 4. Go to the **Actions** tab and trigger **Pluxee Monitor & GitHub Pages** manually to run the first check and deploy the dashboard!

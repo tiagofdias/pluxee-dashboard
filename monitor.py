@@ -399,32 +399,34 @@ def send_notification(topic, title, message, tags=None, priority=None):
     if tg_token and tg_chat_id:
         tg_success = send_telegram(tg_token, tg_chat_id, title, message)
 
-    url = f"{NTFY_URL}"
-    payload = {
-        "topic": topic,
-        "title": title,
-        "message": message,
-    }
-    if tags:
-        payload["tags"] = [tags] if isinstance(tags, str) else tags
-    if priority:
-        payload["priority"] = 3
-
-    headers = {"Content-Type": "application/json"}
-    token = os.getenv("NTFY_TOKEN", "").strip()
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-
+    # 2. ntfy (optional)
     ntfy_success = False
-    try:
-        r = requests.post(url, json=payload, headers=headers, timeout=10)
-        if r.status_code == 200:
-            log.info(f"ntfy notification sent: {title}")
-            ntfy_success = True
-        else:
-            log.warning(f"ntfy responded with status {r.status_code}: {r.text}")
-    except Exception as e:
-        log.error(f"Failed to send ntfy notification: {e}")
+    if topic:
+        url = f"{NTFY_URL}"
+        payload = {
+            "topic": topic,
+            "title": title,
+            "message": message,
+        }
+        if tags:
+            payload["tags"] = [tags] if isinstance(tags, str) else tags
+        if priority:
+            payload["priority"] = 3
+
+        headers = {"Content-Type": "application/json"}
+        token = os.getenv("NTFY_TOKEN", "").strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        try:
+            r = requests.post(url, json=payload, headers=headers, timeout=10)
+            if r.status_code == 200:
+                log.info(f"ntfy notification sent: {title}")
+                ntfy_success = True
+            else:
+                log.warning(f"ntfy responded with status {r.status_code}: {r.text}")
+        except Exception as e:
+            log.error(f"Failed to send ntfy notification: {e}")
 
     return tg_success or ntfy_success
 
