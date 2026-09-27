@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-09-27T18:35:42.771262+00:00",
+  "last_check": "2026-09-27T18:35:41.102211+00:00",
   "balance": {
     "lunch_pass": 273.8,
     "eco_pass": 0.0,
@@ -207,5 +207,29 @@
       "raw_description": "Compra A R BICHO   MARQUES,30-32 - LISBO,P",
       "is_rejected": false
     }
-  ]
+  ],
+  "fingerprints": [
+    "f65a92c79cec90c69cb720f579807413",
+    "284269a01a0cbba810f04009641da2a4",
+    "e43c30714cbc958a836cda8835178c30",
+    "3e0e8b20ce4f64fde1f3703210f9c6a3",
+    "fb7558fd13edb9a78ab76f5a66983a58",
+    "8b3dea9be17466445f58315ddf016ddc",
+    "20f5d500da59fcbe7583225f88f89e26",
+    "2b9ef657ae9a61ee9de52e9f337e2e07",
+    "820fd5fc45d612e01255cbc21ac5efca",
+    "2ed8090fc16d3a4ce129eccdfb2ac6d4",
+    "b6270f0867360d3c001f6d79a9bc4ea5",
+    "98604951d7d71fc84a7da8d87da113bb",
+    "173311ebb09a40c73095a215bc163b3d",
+    "bcdc0ff09a94ac51dc4a5917fc2bc816",
+    "56165deb7cbe88346f7f2d579f9b32b5",
+    "5ecc92b689d593b8916e82f9894546f5",
+    "a3b2702b1efe1b6b95f87616e122d9cc",
+    "1e124c20c199bf93eb7a2ba0a5b481ea",
+    "747b665bf2d57a3f3a8046d4a7ca3bc0",
+    "044db27c766d475ba2300ff099054051"
+  ],
+  "tx_count": 20,
+  "stale_skip_count": 0
 }
