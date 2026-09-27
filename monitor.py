@@ -1,8 +1,8 @@
-"""Pluxee Transaction Monitor — Background service with ntfy push notifications.
+"""Pluxee Transaction Monitor — Telegram Push Notifications.
 
 Periodically checks for new Pluxee transactions using the official Mobile API
-and sends push notifications via ntfy.sh and/or Telegram, including the
-transaction details and remaining balance.
+and sends push notifications via Telegram, including the transaction details
+and exact remaining balance.
 
 Usage:
     python monitor.py              # Run with .env config
@@ -25,14 +25,12 @@ import requests
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(__file__))
-from pluxee_api import fetch_all, PluxeeAuthError, PluxeeConnectionError, PluxeeApiError
+from pluxee_api import fetch_all, PluxeeAuthError, PluxeeConnectionError
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-# On Render, use /tmp (persists between requests on the same instance).
-# Locally, use ./data
 if os.getenv("RENDER"):
     DATA_DIR = "/tmp/pluxee-data"
 else:
@@ -43,7 +41,6 @@ OUTAGE_FILE = os.path.join(DATA_DIR, "outage_state.json")
 PID_FILE = os.path.join(DATA_DIR, "monitor.pid")
 LOG_FILE = os.path.join(DATA_DIR, "monitor.log")
 STATE_MARKER = "📊 PLUXEE_MONITOR_STATE"
-NTFY_URL = "https://ntfy.sh"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -71,12 +68,13 @@ def load_config():
         from dotenv import load_dotenv
         load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
     except ImportError:
-        pass  # dotenv not installed, rely on OS env vars
+        pass
 
     api_claim = os.getenv("PLUXEE_API_CLAIM", "").strip()
     card_id = os.getenv("PLUXEE_CARD_ID", "").strip()
     benefit_id = os.getenv("PLUXEE_BENEFIT_ID", "").strip()
-    topic = os.getenv("NTFY_TOPIC", "pluxee-tiago-a7x9k2").strip()
+    telegram_token = os.getenv("TELEGRAM_TOKEN", "").strip()
+    telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     interval = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
 
     if not api_claim or not card_id or not benefit_id:
@@ -87,7 +85,8 @@ def load_config():
         "api_claim": api_claim,
         "card_id": card_id,
         "benefit_id": benefit_id,
-        "topic": topic,
+        "telegram_token": telegram_token,
+        "telegram_chat_id": telegram_chat_id,
         "interval": interval,
     }
 
@@ -104,7 +103,6 @@ def load_state():
         except (json.JSONDecodeError, IOError):
             pass
 
-    # Local file missing (e.g. Render restart wiped /tmp) — try Telegram
     return _telegram_load_state()
 
 
@@ -123,7 +121,7 @@ def save_state(balance, transactions, stale_skip_count=0):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
-    # Backup to Telegram pinned message (survives Render restarts & GitHub Actions)
+    # Backup to Telegram pinned message (survives stateless runner cycles)
     _telegram_save_state(balance, fingerprints, len(transactions))
 
     # Export static/data.json for GitHub Pages dashboard
@@ -154,7 +152,7 @@ def _tx_fingerprint(tx):
 
 
 # ---------------------------------------------------------------------------
-# Telegram state persistence (survives Render /tmp wipes)
+# Telegram state persistence
 # ---------------------------------------------------------------------------
 
 def _telegram_get_credentials():
@@ -360,7 +358,7 @@ def _clear_outage_state():
         pass
 
 # ---------------------------------------------------------------------------
-# Notification
+# Telegram Notifications
 # ---------------------------------------------------------------------------
 
 def fmt_eur(val):
@@ -370,8 +368,13 @@ def fmt_eur(val):
     return f"{sign}€{formatted}" if val >= 0 else f"-€{formatted}"
 
 
-def send_telegram(token, chat_id, title, message):
-    """Send push notification via Telegram Bot API."""
+def send_notification(title, message):
+    """Send push notification directly via Telegram Bot API."""
+    token, chat_id = _telegram_get_credentials()
+    if not token or not chat_id:
+        log.warning("Telegram credentials not configured; skipping notification.")
+        return False
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     text = f"<b>{title}</b>\n\n{message}"
     try:
@@ -391,51 +394,10 @@ def send_telegram(token, chat_id, title, message):
         return False
 
 
-def send_notification(topic, title, message, tags=None, priority=None):
-    """Send a push notification via ntfy.sh and/or Telegram."""
-    tg_token = os.getenv("TELEGRAM_TOKEN", "").strip()
-    tg_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    tg_success = False
-    if tg_token and tg_chat_id:
-        tg_success = send_telegram(tg_token, tg_chat_id, title, message)
-
-    # 2. ntfy (optional)
-    ntfy_success = False
-    if topic:
-        url = f"{NTFY_URL}"
-        payload = {
-            "topic": topic,
-            "title": title,
-            "message": message,
-        }
-        if tags:
-            payload["tags"] = [tags] if isinstance(tags, str) else tags
-        if priority:
-            payload["priority"] = 3
-
-        headers = {"Content-Type": "application/json"}
-        token = os.getenv("NTFY_TOKEN", "").strip()
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-
-        try:
-            r = requests.post(url, json=payload, headers=headers, timeout=10)
-            if r.status_code == 200:
-                log.info(f"ntfy notification sent: {title}")
-                ntfy_success = True
-            else:
-                log.warning(f"ntfy responded with status {r.status_code}: {r.text}")
-        except Exception as e:
-            log.error(f"Failed to send ntfy notification: {e}")
-
-    return tg_success or ntfy_success
-
-
-def notify_transaction(topic, tx, balance_after):
-    """Send a notification for a single transaction."""
+def notify_transaction(tx, balance_after):
+    """Send a Telegram notification for a single transaction."""
     is_credit = tx["amount"] > 0
     emoji = "🟢" if is_credit else "🔴"
-    tag = "green_circle" if is_credit else "red_circle"
     title = f"{emoji} Pluxee — {'Carregamento' if is_credit else 'Gasto'}"
 
     amount_str = fmt_eur(tx["amount"])
@@ -447,26 +409,17 @@ def notify_transaction(topic, tx, balance_after):
         f"💰 Saldo restante: {balance_str}"
     )
 
-    send_notification(
-        topic=topic,
-        title=title,
-        message=message,
-        tags=tag,
-        priority="default",
-    )
+    send_notification(title, message)
 
 
-def send_test_notification(topic):
-    """Send a test notification to verify the setup."""
+def send_test_notification():
+    """Send a test notification to verify the Telegram setup."""
     send_notification(
-        topic=topic,
         title="🔔 Pluxee Monitor — Teste",
         message=(
-            "O monitor Pluxee Mobile API está a funcionar!\n"
-            "Irá receber alertas automáticos sempre que houver novas transações."
+            "O monitor Pluxee via Telegram está a funcionar!\n"
+            "Irá receber alertas automáticos sempre que houver novas transações ou carregamentos."
         ),
-        tags="white_check_mark",
-        priority="default",
     )
 
 # ---------------------------------------------------------------------------
@@ -516,7 +469,7 @@ def is_monitor_running():
 # ---------------------------------------------------------------------------
 
 def check_for_new_transactions(config):
-    """Check Pluxee for new transactions via Mobile API and notify."""
+    """Check Pluxee for new transactions via Mobile API and notify on Telegram."""
     log.info("Checking for new transactions via Pluxee Mobile API...")
 
     try:
@@ -524,13 +477,11 @@ def check_for_new_transactions(config):
     except PluxeeAuthError as e:
         log.error(f"Authentication error: {e}")
         send_notification(
-            topic=config["topic"],
             title="⚠️ Pluxee — Sessão Expirada",
             message=(
                 "A sessão da API móvel do Pluxee expirou (401).\n"
                 "Por favor, atualize o PLUXEE_API_CLAIM nas definições."
             ),
-            tags="warning",
         )
         return 0, None
     except PluxeeConnectionError as e:
@@ -562,14 +513,12 @@ def check_for_new_transactions(config):
             log.warning("⚠️ Outage detected! API returned empty data. Skipping notifications.")
             prev_total = sum(prev_balance.values())
             send_notification(
-                topic=config["topic"],
                 title="⚠️ Pluxee — Sistema indisponível",
                 message=(
                     f"O sistema Pluxee parece estar em baixo.\n"
                     f"As notificações estão pausadas até o sistema recuperar.\n\n"
                     f"💰 Último saldo conhecido: {fmt_eur(prev_total)}"
                 ),
-                tags="warning",
             )
             _mark_outage_notified()
         else:
@@ -581,10 +530,8 @@ def check_for_new_transactions(config):
         log.info("✅ System recovered! Reconciling state silently.")
         _clear_outage_state()
         send_notification(
-            topic=config["topic"],
             title="✅ Pluxee — Sistema recuperado",
             message=f"O sistema Pluxee está novamente operacional.\n\n💰 Saldo atual: {fmt_eur(total)}",
-            tags="white_check_mark",
         )
         save_state(current_balance, current_txs)
         return 0, current_balance
@@ -604,28 +551,24 @@ def check_for_new_transactions(config):
 
     if new_txs:
         log.info(f"Found {len(new_txs)} new transaction(s)!")
-        # Process chronologically (newest at top of API, so reverse to notify oldest first)
         new_txs_chrono = list(reversed(new_txs))
         for tx in new_txs_chrono:
-            # Use exact running balance provided by Mobile API if available
             bal_after = tx["balance"] if tx.get("balance") is not None else total
-            notify_transaction(config["topic"], tx, bal_after)
+            notify_transaction(tx, bal_after)
     else:
         log.info("No new transactions found.")
 
     # Check for balance changes without transactions
     if abs(total - prev_total) > 0.01 and not new_txs:
         if total == 0 and prev_total > 1.0:
-            log.warning("Balance dropped to €0.00 with no new transactions — likely transient glitch. Skipping.")
+            log.warning("Balance dropped to €0.00 with no new transactions — skipping glitch.")
             return 0, None
 
         diff = total - prev_total
         direction = "subiu" if diff > 0 else "desceu"
         send_notification(
-            topic=config["topic"],
             title=f"Pluxee — Saldo {direction}",
             message=f"O saldo alterou {fmt_eur(diff)}\n\n💰 Saldo atual: {fmt_eur(total)}",
-            tags="chart_with_upwards_trend" if diff > 0 else "chart_with_downwards_trend",
         )
 
     # Save updated state
@@ -654,7 +597,7 @@ def run_loop(config):
     write_pid()
     interval = config["interval"]
 
-    log.info(f"Monitor started (PID: {os.getpid()}, interval: {interval}s, topic: {config['topic']})")
+    log.info(f"Monitor started (PID: {os.getpid()}, interval: {interval}s)")
 
     try:
         while _running:
@@ -676,9 +619,9 @@ def run_loop(config):
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Pluxee Transaction Monitor (Mobile API)")
+    parser = argparse.ArgumentParser(description="Pluxee Transaction Monitor (Telegram)")
     parser.add_argument("--once", action="store_true", help="Run a single check and exit")
-    parser.add_argument("--test", action="store_true", help="Send a test notification and exit")
+    parser.add_argument("--test", action="store_true", help="Send a test Telegram notification and exit")
     parser.add_argument("--status", action="store_true", help="Check if the monitor is running")
     parser.add_argument("--stop", action="store_true", help="Stop a running monitor")
     args = parser.parse_args()
@@ -686,8 +629,8 @@ def main():
     config = load_config()
 
     if args.test:
-        log.info(f"Sending test notification to topic: {config['topic']}")
-        send_test_notification(config["topic"])
+        log.info("Sending test notification to Telegram...")
+        send_test_notification()
         return
 
     if args.status:

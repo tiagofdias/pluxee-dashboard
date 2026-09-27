@@ -297,91 +297,30 @@
   });
 
   /* ========================================
-     NOTIFICATION PANEL
+     NOTIFICATION PANEL (TELEGRAM BOT)
      ======================================== */
 
   var notifStatusDot   = $("notif-status-dot");
   var notifStatusLabel = $("notif-status-label");
   var notifSubtitle    = $("notif-subtitle");
-  var notifTopicName   = $("notif-topic-name");
-  var notifCopyBtn     = $("notif-copy-btn");
   var notifIntervalVal = $("notif-interval-val");
   var notifLastCheck   = $("notif-last-check");
-  var notifToggleBtn   = $("notif-toggle-btn");
-  var notifToggleLabel = $("notif-toggle-label");
-  var notifBtnPlay     = $("notif-btn-play");
-  var notifBtnStop     = $("notif-btn-stop");
   var notifTestBtn     = $("notif-test-btn");
   var notifPollTimer   = null;
-  var _monitorRunning  = false;
-  var _isRender        = false;
-  var _savedNif        = "";
-  var _savedPw         = "";
 
   function updateNotifUI(data) {
-    _monitorRunning = data.running;
-    _isRender = !!data.is_render;
+    if (!data) return;
 
-    if (_isRender) {
-      // Render environment (cron-driven)
-      if (data.has_credentials) {
-        notifStatusDot.className = "notif-status-dot active";
-        if (data.has_telegram) {
-          notifStatusLabel.textContent = "Ativo (Telegram)";
-          notifSubtitle.textContent = "Notificações via Telegram Bot";
-        } else {
-          notifStatusLabel.textContent = "Ativo (Render)";
-          notifSubtitle.textContent = "Monitorização gerida por Cron";
-        }
-        notifToggleLabel.textContent = "Verificar Agora";
-        notifBtnPlay.classList.remove("hidden");
-        notifBtnStop.classList.add("hidden");
-        notifToggleBtn.classList.remove("is-running");
-        notifIntervalVal.textContent = "Externo (Cron)";
-      } else {
-        notifStatusDot.className = "notif-status-dot";
-        notifStatusLabel.textContent = "Sem credenciais";
-        notifSubtitle.textContent = "Configure credenciais no painel do Render";
-        notifToggleLabel.textContent = "Verificar Agora";
-        notifBtnPlay.classList.remove("hidden");
-        notifBtnStop.classList.add("hidden");
-        notifToggleBtn.classList.remove("is-running");
-        notifIntervalVal.textContent = "—";
-      }
-    } else {
-      // Local environment (subprocess-driven)
-      if (data.running) {
-        notifStatusDot.className = "notif-status-dot active";
-        notifStatusLabel.textContent = "Ativo";
-        notifSubtitle.textContent = "A monitorizar transações";
-        notifToggleLabel.textContent = "Parar Monitor";
-        notifBtnPlay.classList.add("hidden");
-        notifBtnStop.classList.remove("hidden");
-        notifToggleBtn.classList.add("is-running");
-      } else {
-        notifStatusDot.className = "notif-status-dot";
-        notifStatusLabel.textContent = "Parado";
-        notifSubtitle.textContent = "Receba alertas no telemóvel";
-        notifToggleLabel.textContent = "Iniciar Monitor";
-        notifBtnPlay.classList.remove("hidden");
-        notifBtnStop.classList.add("hidden");
-        notifToggleBtn.classList.remove("is-running");
-      }
+    if (notifStatusDot) notifStatusDot.className = "notif-status-dot active";
+    if (notifStatusLabel) notifStatusLabel.textContent = "Ativo";
+    if (notifSubtitle) notifSubtitle.textContent = "Alertas instantâneos via @CartaoRefeicaoBot";
 
-      // Interval
-      if (data.interval) {
-        var mins = Math.round(data.interval / 60);
-        notifIntervalVal.textContent = mins + " min";
-      }
+    if (data.interval && notifIntervalVal) {
+      var mins = Math.round(data.interval / 60);
+      notifIntervalVal.textContent = mins + " min (GitHub Actions)";
     }
 
-    // Topic
-    if (data.topic) {
-      notifTopicName.textContent = data.topic;
-    }
-
-    // Last check
-    if (data.last_check) {
+    if (data.last_check && notifLastCheck) {
       try {
         var d = new Date(data.last_check);
         notifLastCheck.textContent = d.toLocaleString("pt-PT", {
@@ -391,102 +330,67 @@
       } catch (_) {
         notifLastCheck.textContent = data.last_check;
       }
-    } else {
-      notifLastCheck.textContent = "—";
     }
   }
 
   function fetchNotifStatus() {
+    // 1. Try local/server backend
     fetch("/api/notifications/status")
-      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error("Not backend");
+        return r.json();
+      })
       .then(updateNotifUI)
-      .catch(function () { /* silent */ });
+      .catch(function () {
+        // 2. Static GitHub Pages mode: use data.json timestamp
+        fetch("./data.json?cb=" + Date.now())
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.updated_at) {
+              updateNotifUI({
+                running: true,
+                interval: 900,
+                last_check: data.updated_at,
+              });
+            }
+          })
+          .catch(function () {});
+      });
   }
 
-  /* Copy topic */
-  notifCopyBtn.addEventListener("click", function () {
-    var topic = notifTopicName.textContent;
-    navigator.clipboard.writeText(topic).then(function () {
-      notifCopyBtn.classList.add("copied");
-      setTimeout(function () { notifCopyBtn.classList.remove("copied"); }, 1500);
-    });
-  });
+  /* Test notification button */
+  if (notifTestBtn) {
+    notifTestBtn.addEventListener("click", function () {
+      notifTestBtn.disabled = true;
+      notifTestBtn.classList.add("is-testing");
 
-  /* Toggle monitor start/stop */
-  notifToggleBtn.addEventListener("click", function () {
-    notifToggleBtn.disabled = true;
-
-    if (!_isRender && _monitorRunning) {
-      // Stop (only local)
-      fetch("/api/notifications/stop", { method: "POST" })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          updateNotifUI({ running: false });
-          notifToggleBtn.disabled = false;
-        })
-        .catch(function () {
-          notifToggleBtn.disabled = false;
-        });
-    } else {
-      // Start (local) or Check Now (Render)
-      var body = {
-        nif: _savedNif || usernameIn.value.trim(),
-        password: _savedPw || passwordIn.value,
-        topic: notifTopicName.textContent,
-      };
-
-      fetch("/api/notifications/start", {
+      fetch("/api/notifications/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({}),
       })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+          if (!r.ok) throw new Error("Status " + r.status);
+          return r.json();
+        })
         .then(function (data) {
+          notifTestBtn.classList.remove("is-testing");
           if (data.success) {
-            if (_isRender) {
-              alert("Verificação manual concluída com sucesso! Novas transações: " + (data.new_transactions || 0));
-              fetchNotifStatus();
-            } else {
-              updateNotifUI({ running: true, topic: data.topic, interval: data.interval });
-            }
-          } else {
-            alert(data.error || "Erro ao iniciar o monitor");
+            notifTestBtn.classList.add("test-success");
+            setTimeout(function () {
+              notifTestBtn.classList.remove("test-success");
+            }, 2500);
           }
-          notifToggleBtn.disabled = false;
+          notifTestBtn.disabled = false;
         })
         .catch(function () {
-          alert("Erro de rede ao ligar ao monitor");
-          notifToggleBtn.disabled = false;
+          // In static mode or if API endpoint isn't available, open the bot directly in Telegram
+          notifTestBtn.classList.remove("is-testing");
+          notifTestBtn.disabled = false;
+          window.open("https://t.me/CartaoRefeicaoBot", "_blank");
         });
-    }
-  });
-
-  /* Test notification */
-  notifTestBtn.addEventListener("click", function () {
-    notifTestBtn.disabled = true;
-    notifTestBtn.classList.add("is-testing");
-
-    fetch("/api/notifications/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic: notifTopicName.textContent }),
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        notifTestBtn.classList.remove("is-testing");
-        if (data.success) {
-          notifTestBtn.classList.add("test-success");
-          setTimeout(function () {
-            notifTestBtn.classList.remove("test-success");
-          }, 2000);
-        }
-        notifTestBtn.disabled = false;
-      })
-      .catch(function () {
-        notifTestBtn.classList.remove("is-testing");
-        notifTestBtn.disabled = false;
-      });
-  });
+    });
+  }
 
 })();
 

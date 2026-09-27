@@ -13,8 +13,10 @@ services:
         value: "bHnxCGNGTfJEdgXDz4paOPlcAr6fOsEDgIgkE84nDT8%3DslEA7yYOHkT0tOM3"
       - key: PLUXEE_BENEFIT_ID
         value: "Fjzuh5HrgzFxK%2FWm9BXIAQ%3D%3DX0kllae3G4hK4L3I"
-      - key: NTFY_TOPIC
-        value: pluxee-tiago-a7x9k2
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
       - key: CRON_SECRET
         generateValue: true  # Auto-generate a random secret for cron protection
     healthCheckPath: /ping

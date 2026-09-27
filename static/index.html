@@ -213,40 +213,34 @@
             <div class="notif-head-left">
               <div class="notif-icon-wrap">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  <path d="M21.5 2L2 9.5l7 3 3 7 9.5-17.5z"/>
+                  <path d="M9 12.5L21.5 2"/>
                 </svg>
               </div>
               <div>
-                <h2 class="notif-title">Notificações</h2>
-                <p class="notif-subtitle" id="notif-subtitle">Receba alertas no telemóvel</p>
+                <h2 class="notif-title">Notificações Telegram</h2>
+                <p class="notif-subtitle" id="notif-subtitle">Alertas instantâneos a cada movimento</p>
               </div>
             </div>
             <div class="notif-status-wrap">
-              <span class="notif-status-dot" id="notif-status-dot"></span>
-              <span class="notif-status-label" id="notif-status-label">Parado</span>
+              <span class="notif-status-dot active" id="notif-status-dot"></span>
+              <span class="notif-status-label" id="notif-status-label">Ativo</span>
             </div>
           </div>
 
           <div class="notif-body" id="notif-body">
-            <!-- Topic display -->
-            <div class="notif-topic-row">
-              <div class="notif-field-label">Tópico ntfy</div>
-              <div class="notif-topic-box">
-                <code class="notif-topic-name" id="notif-topic-name">pluxee-tiago-a7x9k2</code>
-                <button class="notif-copy-btn" id="notif-copy-btn" aria-label="Copy topic" title="Copiar tópico">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                  </svg>
-                </button>
-              </div>
+            <!-- Telegram Bot display -->
+            <div class="notif-info-row">
+              <span class="notif-info-key">Canal de Alertas</span>
+              <span class="notif-info-val">
+                <a href="https://t.me/CartaoRefeicaoBot" target="_blank" rel="noopener" style="color: var(--indigo); text-decoration: none; font-weight: 600;">@CartaoRefeicaoBot ↗</a>
+              </span>
             </div>
 
             <!-- Interval display -->
             <div class="notif-info-row">
-              <span class="notif-info-key">Intervalo</span>
-              <span class="notif-info-val" id="notif-interval-val">5 min</span>
+              <span class="notif-info-key">Frequência</span>
+              <span class="notif-info-val" id="notif-interval-val">15 min (GitHub Actions)</span>
             </div>
 
             <!-- Last check -->
@@ -257,21 +251,19 @@
 
             <!-- Action buttons -->
             <div class="notif-actions">
-              <button class="notif-btn notif-btn-primary" id="notif-toggle-btn">
-                <svg class="notif-btn-ico" id="notif-btn-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="5 3 19 12 5 21 5 3"/>
+              <a href="https://t.me/CartaoRefeicaoBot" target="_blank" rel="noopener" class="notif-btn notif-btn-primary" style="text-decoration: none; justify-content: center;">
+                <svg class="notif-btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2L2 9.5l7 3 3 7 9.5-17.5z"/>
+                  <path d="M9 12.5L21.5 2"/>
                 </svg>
-                <svg class="notif-btn-ico hidden" id="notif-btn-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
-                </svg>
-                <span id="notif-toggle-label">Iniciar Monitor</span>
-              </button>
+                <span>Abrir Telegram</span>
+              </a>
               <button class="notif-btn notif-btn-secondary" id="notif-test-btn">
                 <svg class="notif-btn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
                 </svg>
-                Testar
+                Testar Alerta
               </button>
             </div>
 
@@ -283,15 +275,13 @@
                   <line x1="12" y1="16" x2="12" y2="12"/>
                   <line x1="12" y1="8" x2="12.01" y2="8"/>
                 </svg>
-                Como configurar no telemóvel
+                Como funcionam os alertas
               </summary>
               <div class="notif-setup-content">
                 <ol class="notif-steps">
-                  <li>Instala a app <strong>ntfy</strong> da Play Store</li>
-                  <li>Abre a app e toca em <strong>+</strong></li>
-                  <li>Escreve o tópico: <code>pluxee-tiago-a7x9k2</code></li>
-                  <li>Toca em <strong>Subscribe</strong></li>
-                  <li>Volta aqui e clica em <strong>Testar</strong> para confirmar</li>
+                  <li><strong>Gastos:</strong> Receba o nome da loja, montante gasto e saldo restante logo após comprar.</li>
+                  <li><strong>Carregamentos:</strong> Notificação automática quando a empresa carregar o subsídio mensal.</li>
+                  <li><strong>24/7 Automático:</strong> Monitorizado a cada 15 minutos via GitHub Actions sem custos nem servidor.</li>
                 </ol>
               </div>
             </details>

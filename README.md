@@ -3,9 +3,8 @@
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live%20Dashboard-brightgreen)](https://tiagofdias.github.io/pluxee-dashboard/)
 [![Pluxee Mobile API](https://img.shields.io/badge/Pluxee%20API-Mobile%20v2-blue)](https://api.mobile.clients.pluxee.pt)
 [![Telegram Notifications](https://img.shields.io/badge/Telegram-Bot%20Alerts-blue?logo=telegram)](https://telegram.org)
-[![ntfy.sh](https://img.shields.io/badge/ntfy.sh-Push%20Alerts-orange)](https://ntfy.sh)
 
-A real-time balance dashboard and automated transaction monitor for **Pluxee Portugal** (formerly Sodexo Pass Portugal). Directly communicates with the official Pluxee Portugal Mobile API (`api.mobile.clients.pluxee.pt`) to provide instant, 100% accurate transaction tracking, live balance consultation, and immediate push notifications to **Telegram** and **ntfy.sh**.
+A real-time balance dashboard and automated transaction monitor for **Pluxee Portugal** (formerly Sodexo Pass Portugal). Directly communicates with the official Pluxee Portugal Mobile API (`api.mobile.clients.pluxee.pt`) to provide instant, 100% accurate transaction tracking, live balance consultation, and immediate push notifications to **Telegram**.
 
 ---
 
@@ -68,7 +67,6 @@ Using a network proxy (e.g., [HTTP Toolkit](https://httptoolkit.com/), Charles, 
    * `PLUXEE_BENEFIT_ID`
    * `TELEGRAM_TOKEN`
    * `TELEGRAM_CHAT_ID`
-   * `NTFY_TOPIC` *(Optional — only if you also use the ntfy.sh app)*
 3. Go to **Settings** > **Pages**:
    * Set **Source** to **GitHub Actions**.
 4. Go to the **Actions** tab and trigger **Pluxee Monitor & GitHub Pages** manually to run the first check and deploy the dashboard!
@@ -87,7 +85,6 @@ Copy `.env.example` to `.env` and fill in your values:
 PLUXEE_API_CLAIM=your_api_claim_token_here
 PLUXEE_CARD_ID=bHnxCGNGTfJEdgXDz4paOPlcAr6fOsEDgIgkE84nDT8%3DslEA7yYOHkT0tOM3
 PLUXEE_BENEFIT_ID=Fjzuh5HrgzFxK%2FWm9BXIAQ%3D%3DX0kllae3G4hK4L3I
-NTFY_TOPIC=pluxee-tiago-a7x9k2
 POLL_INTERVAL_SECONDS=300
 TELEGRAM_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
 TELEGRAM_CHAT_ID=123456789
@@ -95,7 +92,7 @@ TELEGRAM_CHAT_ID=123456789
 
 ### Commands
 ```powershell
-# Send a test notification to Telegram and ntfy
+# Send a test notification to Telegram
 python monitor.py --test
 
 # Run a single transaction check

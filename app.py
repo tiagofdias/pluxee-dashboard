@@ -23,7 +23,6 @@ CORS(app)
 MONITOR_SCRIPT = os.path.join(os.path.dirname(__file__), "monitor.py")
 IS_RENDER = bool(os.getenv("RENDER"))
 
-# Data directory — use /tmp on Render (ephemeral but writable)
 if IS_RENDER:
     DATA_DIR = "/tmp/pluxee-data"
 else:
@@ -124,7 +123,6 @@ def serve_data():
     return send_from_directory("static", "data.json")
 
 
-
 @app.route("/api/balance", methods=["POST"])
 def get_balance():
     """Fetch Pluxee balance and transactions via Mobile API."""
@@ -192,15 +190,12 @@ def notification_status():
     running = _is_monitor_running()
     pid = _read_pid() if running else None
 
-    topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
     interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
     has_creds = bool(
         _get_env("PLUXEE_API_CLAIM") and _get_env("PLUXEE_CARD_ID") and _get_env("PLUXEE_BENEFIT_ID")
     )
-    has_token = bool(os.getenv("NTFY_TOKEN"))
     has_telegram = bool(os.getenv("TELEGRAM_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"))
 
-    # Read last few log lines
     last_log = ""
     if os.path.exists(LOG_FILE):
         try:
@@ -210,7 +205,6 @@ def notification_status():
         except IOError:
             pass
 
-    # Read last state
     state = None
     if os.path.exists(STATE_FILE):
         try:
@@ -222,10 +216,9 @@ def notification_status():
     return jsonify({
         "running": running,
         "pid": pid,
-        "topic": topic,
+        "channel": "Telegram Bot (@CartaoRefeicaoBot)",
         "interval": interval,
         "has_credentials": has_creds,
-        "has_token": has_token,
         "has_telegram": has_telegram,
         "is_render": IS_RENDER,
         "last_check": state.get("last_check") if state else None,
@@ -241,7 +234,8 @@ def notification_start():
     api_claim = data.get("api_claim", "").strip() or _get_env("PLUXEE_API_CLAIM")
     card_id = data.get("card_id", "").strip() or _get_env("PLUXEE_CARD_ID")
     benefit_id = data.get("benefit_id", "").strip() or _get_env("PLUXEE_BENEFIT_ID")
-    topic = data.get("topic", "").strip() or _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
+    telegram_token = data.get("telegram_token", "").strip() or _get_env("TELEGRAM_TOKEN")
+    telegram_chat_id = data.get("telegram_chat_id", "").strip() or _get_env("TELEGRAM_CHAT_ID")
     interval = int(data.get("interval", 0) or _get_env("POLL_INTERVAL_SECONDS", "300"))
 
     if not api_claim or not card_id or not benefit_id:
@@ -251,12 +245,12 @@ def notification_start():
         "api_claim": api_claim,
         "card_id": card_id,
         "benefit_id": benefit_id,
-        "topic": topic,
+        "telegram_token": telegram_token,
+        "telegram_chat_id": telegram_chat_id,
         "interval": interval,
     }
 
     if IS_RENDER:
-        # On Render: run one check immediately (cron handles periodic runs)
         try:
             from monitor import check_for_new_transactions
             count, balance = check_for_new_transactions(config)
@@ -267,13 +261,11 @@ def notification_start():
                 "mode": "cron",
                 "new_transactions": count,
                 "balance": total,
-                "topic": topic,
             })
         except Exception as e:
             traceback.print_exc()
             return jsonify({"error": f"Check failed: {str(e)}"}), 500
     else:
-        # Local: save to .env and start subprocess
         if _is_monitor_running():
             return jsonify({"error": "Monitor is already running", "running": True}), 409
 
@@ -281,7 +273,6 @@ def notification_start():
             "PLUXEE_API_CLAIM": api_claim,
             "PLUXEE_CARD_ID": card_id,
             "PLUXEE_BENEFIT_ID": benefit_id,
-            "NTFY_TOPIC": topic,
             "POLL_INTERVAL_SECONDS": str(interval),
         })
 
@@ -304,7 +295,6 @@ def notification_start():
                 "running": True,
                 "mode": "subprocess",
                 "pid": proc.pid,
-                "topic": topic,
             })
         except Exception as e:
             return jsonify({"error": f"Failed to start monitor: {str(e)}"}), 500
@@ -335,14 +325,11 @@ def notification_stop():
 
 @app.route("/api/notifications/test", methods=["POST"])
 def notification_test():
-    """Send a test notification."""
-    data = request.get_json() or {}
-    topic = data.get("topic", "").strip() or _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
-
+    """Send a test notification to Telegram."""
     try:
         from monitor import send_test_notification
-        send_test_notification(topic)
-        return jsonify({"success": True, "topic": topic})
+        send_test_notification()
+        return jsonify({"success": True})
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"Failed to send test notification: {str(e)}"}), 500
@@ -362,8 +349,10 @@ def notification_config():
         env_updates["PLUXEE_CARD_ID"] = data["card_id"].strip()
     if "benefit_id" in data:
         env_updates["PLUXEE_BENEFIT_ID"] = data["benefit_id"].strip()
-    if "topic" in data:
-        env_updates["NTFY_TOPIC"] = data["topic"].strip()
+    if "telegram_token" in data:
+        env_updates["TELEGRAM_TOKEN"] = data["telegram_token"].strip()
+    if "telegram_chat_id" in data:
+        env_updates["TELEGRAM_CHAT_ID"] = data["telegram_chat_id"].strip()
     if "interval" in data:
         env_updates["POLL_INTERVAL_SECONDS"] = str(int(data["interval"]))
 
@@ -379,7 +368,7 @@ def notification_config():
 
 @app.route("/ping", methods=["GET"])
 def ping():
-    """Health check endpoint — keep Render alive."""
+    """Health check endpoint."""
     return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 
@@ -395,7 +384,8 @@ def cron_check():
     api_claim = _get_env("PLUXEE_API_CLAIM")
     card_id = _get_env("PLUXEE_CARD_ID")
     benefit_id = _get_env("PLUXEE_BENEFIT_ID")
-    topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
+    telegram_token = _get_env("TELEGRAM_TOKEN")
+    telegram_chat_id = _get_env("TELEGRAM_CHAT_ID")
     interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
 
     if not api_claim or not card_id or not benefit_id:
@@ -407,7 +397,8 @@ def cron_check():
             "api_claim": api_claim,
             "card_id": card_id,
             "benefit_id": benefit_id,
-            "topic": topic,
+            "telegram_token": telegram_token,
+            "telegram_chat_id": telegram_chat_id,
             "interval": interval,
         }
         count, balance = check_for_new_transactions(config)
