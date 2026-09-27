@@ -17,29 +17,29 @@
   /* ---- DOM ---- */
   const $ = (s) => document.getElementById(s);
 
-  const loginView   = $("login-view");
-  const balanceView = $("balance-view");
-  const loginForm   = $("login-form");
-  const usernameIn  = $("username");
-  const passwordIn  = $("password");
-  const submitBtn   = $("submit-btn");
-  const btnLabel    = $("btn-label");
-  const btnArrow    = $("btn-arrow");
-  const btnSpinner  = $("btn-spinner");
-  const errorToast  = $("error-toast");
-  const errorText   = $("error-text");
-  const logoutBtn   = $("btn-logout");
-  const togglePw    = $("toggle-pw");
-  const icoEye      = $("ico-eye");
-  const icoEyeOff   = $("ico-eye-off");
+  const loginView      = $("login-view");
+  const balanceView    = $("balance-view");
+  const loginForm      = $("login-form");
+  const apiStatusBadge = $("api-status-badge");
+  const apiStatusText  = $("api-status-text");
+  const tokenFields    = $("token-fields");
+  const apiClaimIn     = $("api-claim");
+  const toggleTokenBtn = $("toggle-token-btn");
+  const submitBtn      = $("submit-btn");
+  const btnLabel       = $("btn-label");
+  const btnArrow       = $("btn-arrow");
+  const btnSpinner     = $("btn-spinner");
+  const errorToast     = $("error-toast");
+  const errorText      = $("error-text");
+  const logoutBtn      = $("btn-logout");
 
-  const heroAmount  = $("hero-amount");
-  const heroRingFill = $("hero-ring-fill");
-  const heroRingPct = $("hero-ring-pct");
-  const topbarTime  = $("topbar-time");
+  const heroAmount     = $("hero-amount");
+  const heroRingFill   = $("hero-ring-fill");
+  const heroRingPct    = $("hero-ring-pct");
+  const topbarTime     = $("topbar-time");
 
-  const txCount     = $("tx-count");
-  const txList      = $("tx-list");
+  const txCount        = $("tx-count");
+  const txList         = $("tx-list");
 
   const passes = {
     lunch: { val: $("val-lunch"), bar: $("bar-lunch") },
@@ -86,42 +86,85 @@
     btnSpinner.classList.toggle("hidden", !on);
   }
 
-  /* ---- Password toggle ---- */
-  togglePw.addEventListener("click", function () {
-    const show = passwordIn.type === "password";
-    passwordIn.type = show ? "text" : "password";
-    icoEye.classList.toggle("hidden", !show);
-    icoEyeOff.classList.toggle("hidden", show);
+  /* ---- Toggle Token Field ---- */
+  toggleTokenBtn.addEventListener("click", function () {
+    tokenFields.classList.toggle("hidden");
+    if (!tokenFields.classList.contains("hidden")) {
+      apiClaimIn.focus();
+    }
   });
+
+  /* ---- Check Initial Config Status / Load Site Data ---- */
+  async function checkInitialStatus() {
+    // 1. Check if static data.json exists (e.g. GitHub Pages)
+    try {
+      const res = await fetch("./data.json?cb=" + Date.now());
+      if (res.ok) {
+        const data = await res.json();
+        if (data.balance && data.transactions) {
+          renderBalance(data.balance, data.transactions, data.updated_at);
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // 2. Otherwise check server API status (local Flask backend)
+    try {
+      const res = await fetch("/api/notifications/status");
+      const data = await res.json();
+      if (data.has_credentials) {
+        apiStatusBadge.classList.remove("warning");
+        apiStatusText.textContent = "⚡ API Móvel Conectada · Pronto a consultar";
+      } else {
+        apiStatusBadge.classList.add("warning");
+        apiStatusText.textContent = "⚠️ ApiClaim não configurado. Introduza o token abaixo.";
+        tokenFields.classList.remove("hidden");
+      }
+    } catch (_) {
+      apiStatusBadge.classList.add("warning");
+      apiStatusText.textContent = "⚠️ Modo estático ou servidor offline";
+    }
+  }
+  checkInitialStatus();
 
   /* ---- Submit ---- */
   loginForm.addEventListener("submit", async function (e) {
     e.preventDefault();
     hideError();
 
-    const u = usernameIn.value.trim();
-    const p = passwordIn.value;
-    if (!u || !p) { showError("Por favor, introduza o NIF e a palavra-passe."); return; }
+    const claim = apiClaimIn ? apiClaimIn.value.trim() : "";
+    const reqBody = claim ? { api_claim: claim } : {};
 
     setLoading(true);
     try {
       const res = await fetch("/api/balance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: u, password: p }),
+        body: JSON.stringify(reqBody),
       });
       const data = await res.json();
-      if (!res.ok) { showError(data.error || "Something went wrong."); return; }
-      if (data.success) renderBalance(data.balance, data.transactions);
+      if (!res.ok) {
+        showError(data.error || "Ocorreu um erro ao obter os dados.");
+        if (res.status === 401) {
+          tokenFields.classList.remove("hidden");
+          apiStatusBadge.classList.add("warning");
+          apiStatusText.textContent = "⚠️ Sessão expirada. Atualize o ApiClaim.";
+        }
+        return;
+      }
+      if (data.success) {
+        renderBalance(data.balance, data.transactions);
+      }
     } catch (_) {
-      showError("Network error — check your connection.");
+      showError("Erro de ligação — verifique a sua ligação à internet.");
     } finally {
       setLoading(false);
     }
   });
 
+
   /* ---- Render Balance ---- */
-  function renderBalance(b, txs) {
+  function renderBalance(b, txs, updatedAt) {
     loginView.style.animation = "fadeOut 0.3s ease forwards";
     setTimeout(function () {
       loginView.classList.add("hidden");
@@ -137,11 +180,20 @@
       const total = vals.lunch + vals.eco + vals.gift + vals.conso;
 
       // Time stamp
-      const now = new Date();
-      topbarTime.textContent =
-        now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) +
-        " · " +
-        now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      if (updatedAt) {
+        const d = new Date(updatedAt);
+        topbarTime.textContent =
+          "Atualizado: " +
+          d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) +
+          " · " +
+          d.toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" });
+      } else {
+        const now = new Date();
+        topbarTime.textContent =
+          now.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" }) +
+          " · " +
+          now.toLocaleDateString("pt-PT", { day: "numeric", month: "short", year: "numeric" });
+      }
 
       // Animate total
       countUp(heroAmount, total);
@@ -167,8 +219,6 @@
       renderTransactions(txs || []);
 
       // Init notification panel
-      _savedNif = usernameIn.value.trim();
-      _savedPw = passwordIn.value;
       fetchNotifStatus();
       if (notifPollTimer) clearInterval(notifPollTimer);
       notifPollTimer = setInterval(fetchNotifStatus, 15000);
@@ -196,6 +246,9 @@
         : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>`;
         
       const iconClass = isPositive ? "tx-icon-positive" : "tx-icon-negative";
+      const balStr = (tx.balance !== null && tx.balance !== undefined)
+        ? ` · Saldo: ${fmt(tx.balance)}`
+        : "";
       
       const item = document.createElement("div");
       item.className = "tx-item";
@@ -206,7 +259,7 @@
           </div>
           <div class="tx-info">
             <p class="tx-desc">${tx.description}</p>
-            <p class="tx-date">${tx.date}</p>
+            <p class="tx-date">${tx.date}${balStr}</p>
           </div>
         </div>
         <span class="tx-amount ${amtClass}">${amtStr}</span>
@@ -230,9 +283,6 @@
 
     txList.innerHTML = "";
     txCount.textContent = "0 transações";
-
-    usernameIn.value = "";
-    passwordIn.value = "";
     hideError();
 
     // Stop notification status polling
@@ -243,7 +293,7 @@
 
     loginView.classList.remove("hidden");
     loginView.style.animation = "fadeUp 0.5s ease both";
-    usernameIn.focus();
+    checkInitialStatus();
   });
 
   /* ========================================

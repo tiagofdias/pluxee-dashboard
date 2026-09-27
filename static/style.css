@@ -1173,6 +1173,76 @@ body {
 }
 
 /* =====================
+   API STATUS BADGE & TOKEN TOGGLE
+   ===================== */
+.api-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(46, 213, 115, 0.08);
+  border: 1px solid rgba(46, 213, 115, 0.2);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #2ed573;
+  transition: all 0.3s ease;
+}
+
+.api-status-badge.warning {
+  background: rgba(255, 159, 67, 0.08);
+  border-color: rgba(255, 159, 67, 0.2);
+  color: #ff9f43;
+}
+
+.api-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2ed573;
+  box-shadow: 0 0 10px rgba(46, 213, 115, 0.6);
+  flex-shrink: 0;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+.api-status-badge.warning .api-status-dot {
+  background: #ff9f43;
+  box-shadow: 0 0 10px rgba(255, 159, 67, 0.6);
+}
+
+.token-fields {
+  margin-bottom: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+.token-toggle-wrap {
+  text-align: center;
+  margin-top: 14px;
+}
+
+.token-toggle-btn {
+  background: none;
+  border: none;
+  color: var(--text-3);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.2s ease;
+}
+
+.token-toggle-btn:hover {
+  color: var(--indigo);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+/* =====================
    RESPONSIVE
    ===================== */
 @media (max-width: 480px) {
@@ -1190,4 +1260,6 @@ body {
   .notif-actions { flex-direction: column; }
   .notif-btn-secondary { flex: 1; }
 }
+
+
 

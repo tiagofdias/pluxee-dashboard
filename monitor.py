@@ -1,8 +1,8 @@
 """Pluxee Transaction Monitor — Background service with ntfy push notifications.
 
-Periodically checks for new Pluxee transactions and sends push notifications
-to your Android phone via ntfy.sh, including the transaction details and
-remaining balance.
+Periodically checks for new Pluxee transactions using the official Mobile API
+and sends push notifications via ntfy.sh and/or Telegram, including the
+transaction details and remaining balance.
 
 Usage:
     python monitor.py              # Run with .env config
@@ -25,7 +25,7 @@ import requests
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(__file__))
-from pluxee_scraper import fetch_all
+from pluxee_api import fetch_all, PluxeeAuthError, PluxeeConnectionError, PluxeeApiError
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -73,18 +73,20 @@ def load_config():
     except ImportError:
         pass  # dotenv not installed, rely on OS env vars
 
-    nif = os.getenv("PLUXEE_NIF", "").strip()
-    password = os.getenv("PLUXEE_PASSWORD", "").strip()
+    api_claim = os.getenv("PLUXEE_API_CLAIM", "").strip()
+    card_id = os.getenv("PLUXEE_CARD_ID", "").strip()
+    benefit_id = os.getenv("PLUXEE_BENEFIT_ID", "").strip()
     topic = os.getenv("NTFY_TOPIC", "pluxee-tiago-a7x9k2").strip()
     interval = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
 
-    if not nif or not password:
-        log.error("PLUXEE_NIF and PLUXEE_PASSWORD must be set in .env or environment")
+    if not api_claim or not card_id or not benefit_id:
+        log.error("PLUXEE_API_CLAIM, PLUXEE_CARD_ID, and PLUXEE_BENEFIT_ID must be configured")
         sys.exit(1)
 
     return {
-        "nif": nif,
-        "password": password,
+        "api_claim": api_claim,
+        "card_id": card_id,
+        "benefit_id": benefit_id,
         "topic": topic,
         "interval": interval,
     }
@@ -121,8 +123,28 @@ def save_state(balance, transactions, stale_skip_count=0):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
-    # Backup to Telegram pinned message (survives Render restarts)
+    # Backup to Telegram pinned message (survives Render restarts & GitHub Actions)
     _telegram_save_state(balance, fingerprints, len(transactions))
+
+    # Export static/data.json for GitHub Pages dashboard
+    _export_site_data(balance, transactions)
+
+
+def _export_site_data(balance, transactions):
+    """Write static data.json for GitHub Pages dashboard."""
+    site_dir = os.path.join(os.path.dirname(__file__), "static")
+    os.makedirs(site_dir, exist_ok=True)
+    site_file = os.path.join(site_dir, "data.json")
+    payload = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "balance": balance,
+        "transactions": transactions,
+    }
+    try:
+        with open(site_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        log.warning(f"Could not export static/data.json: {e}")
 
 
 def _tx_fingerprint(tx):
@@ -145,12 +167,7 @@ def _telegram_get_credentials():
 
 
 def _telegram_save_state(balance, fingerprints, tx_count):
-    """Save state as a pinned document in Telegram.
-
-    Sends the state as a .json file attachment with a clean human-readable
-    caption (no raw JSON visible in chat). Replaces any previous state
-    message automatically.
-    """
+    """Save state as a pinned document in Telegram."""
     token, chat_id = _telegram_get_credentials()
     if not token or not chat_id:
         return
@@ -171,11 +188,10 @@ def _telegram_save_state(balance, fingerprints, tx_count):
     total = sum(balance.values())
     sign = "+" if total >= 0 else "-"
     formatted = f"{abs(total):,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
-    total_str = f"{sign}\u20ac{formatted}"
-    caption = f"{STATE_MARKER}\n\ud83d\udcb0 Saldo: {total_str} | {tx_count} transa\u00e7\u00f5es"
+    total_str = f"{sign}€{formatted}"
+    caption = f"{STATE_MARKER}\n💰 Saldo: {total_str} | {tx_count} transações"
 
     try:
-        # Find existing pinned state message (text or document) to replace
         old_msg_id = None
         r = requests.get(
             f"https://api.telegram.org/bot{token}/getChat",
@@ -185,12 +201,10 @@ def _telegram_save_state(balance, fingerprints, tx_count):
         if r.status_code == 200:
             pinned = r.json().get("result", {}).get("pinned_message")
             if pinned:
-                # Match our marker in either caption (new) or text (old)
                 msg_text = pinned.get("caption", "") or pinned.get("text", "")
                 if STATE_MARKER in msg_text:
                     old_msg_id = pinned["message_id"]
 
-        # Send state as a document attachment
         file_obj = io.BytesIO(json_bytes)
         send_r = requests.post(
             f"https://api.telegram.org/bot{token}/sendDocument",
@@ -204,14 +218,11 @@ def _telegram_save_state(balance, fingerprints, tx_count):
         )
         if send_r.status_code == 200:
             new_msg_id = send_r.json()["result"]["message_id"]
-            # Pin the new message silently
             requests.post(
                 f"https://api.telegram.org/bot{token}/pinChatMessage",
-                json={"chat_id": chat_id, "message_id": new_msg_id,
-                      "disable_notification": True},
+                json={"chat_id": chat_id, "message_id": new_msg_id, "disable_notification": True},
                 timeout=10,
             )
-            # Delete the old state message to keep the chat clean
             if old_msg_id:
                 requests.post(
                     f"https://api.telegram.org/bot{token}/deleteMessage",
@@ -219,45 +230,12 @@ def _telegram_save_state(balance, fingerprints, tx_count):
                     timeout=10,
                 )
             log.info("State backed up to Telegram (pinned document)")
-        else:
-            log.warning(f"Telegram sendDocument failed: {send_r.status_code} {send_r.text}. "
-                        "Falling back to text-based message.")
-            # Fallback: send as text message
-            text = f"{STATE_MARKER}\n{json.dumps(compact, separators=(',', ':'), ensure_ascii=False)}"
-            fallback_r = requests.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": text, "disable_notification": True},
-                timeout=10,
-            )
-            if fallback_r.status_code == 200:
-                new_msg_id = fallback_r.json()["result"]["message_id"]
-                # Pin the new message
-                requests.post(
-                    f"https://api.telegram.org/bot{token}/pinChatMessage",
-                    json={"chat_id": chat_id, "message_id": new_msg_id,
-                          "disable_notification": True},
-                    timeout=10,
-                )
-                # Delete the old state message
-                if old_msg_id:
-                    requests.post(
-                        f"https://api.telegram.org/bot{token}/deleteMessage",
-                        json={"chat_id": chat_id, "message_id": old_msg_id},
-                        timeout=10,
-                    )
-                log.info("State backed up to Telegram (pinned text fallback)")
-            else:
-                log.error(f"Telegram fallback sendMessage failed: {fallback_r.status_code} {fallback_r.text}")
     except Exception as e:
         log.warning(f"Failed to back up state to Telegram: {e}")
 
 
 def _telegram_load_state():
-    """Load state from the Telegram pinned message.
-
-    Supports both the new document-based format and the legacy text-based
-    format for backward compatibility. Returns state dict or None.
-    """
+    """Load state from the Telegram pinned message."""
     token, chat_id = _telegram_get_credentials()
     if not token or not chat_id:
         return None
@@ -275,11 +253,9 @@ def _telegram_load_state():
         if not pinned:
             return None
 
-        # --- New format: document attachment with caption ---
         caption = pinned.get("caption", "")
         if STATE_MARKER in caption and pinned.get("document"):
             file_id = pinned["document"]["file_id"]
-            # Resolve file path
             file_r = requests.get(
                 f"https://api.telegram.org/bot{token}/getFile",
                 params={"file_id": file_id},
@@ -288,7 +264,6 @@ def _telegram_load_state():
             if file_r.status_code != 200:
                 return None
             file_path = file_r.json()["result"]["file_path"]
-            # Download the JSON file
             dl_r = requests.get(
                 f"https://api.telegram.org/file/bot{token}/{file_path}",
                 timeout=10,
@@ -297,7 +272,6 @@ def _telegram_load_state():
                 return None
             compact = dl_r.json()
         else:
-            # --- Legacy format: raw JSON in message text ---
             text = pinned.get("text", "")
             if STATE_MARKER not in text:
                 return None
@@ -327,27 +301,18 @@ def _telegram_load_state():
 # ---------------------------------------------------------------------------
 
 def _looks_like_outage(current_balance, current_txs, prev_state):
-    """Detect if the API response looks like a system outage rather than real data.
-
-    When Pluxee goes down, the portal returns an empty page with 0 balance
-    and 0 transactions. We detect this by comparing against our last known
-    good state: if we previously had transactions and balance but now
-    everything is gone, it's almost certainly an outage.
-    """
+    """Detect if the API response looks like a system outage rather than real data."""
     if prev_state is None:
-        return False  # First run, can't detect outage
+        return False
 
     prev_tx_count = prev_state.get("tx_count", len(prev_state.get("transactions", [])))
     prev_balance = prev_state.get("balance", {})
     prev_total = sum(prev_balance.values())
     current_total = sum(current_balance.values())
 
-    # If we previously had transactions and balance, but now we get nothing,
-    # this is almost certainly an outage, not real activity
     if prev_tx_count > 0 and prev_total > 0 and len(current_txs) == 0 and current_total == 0:
         return True
 
-    # If balance suddenly drops to exactly 0 AND all transactions vanished
     if prev_total > 1.0 and current_total == 0 and len(current_txs) == 0:
         return True
 
@@ -355,7 +320,7 @@ def _looks_like_outage(current_balance, current_txs, prev_state):
 
 
 def _load_outage_state():
-    """Load the outage tracking state from disk. Returns None if not in outage."""
+    """Load outage tracking state from disk."""
     if not os.path.exists(OUTAGE_FILE):
         return None
     try:
@@ -366,7 +331,7 @@ def _load_outage_state():
 
 
 def _save_outage_state(prev_balance):
-    """Save outage state to disk. Called once when an outage is first detected."""
+    """Save outage state to disk."""
     os.makedirs(DATA_DIR, exist_ok=True)
     state = {
         "detected_at": datetime.now(timezone.utc).isoformat(),
@@ -379,7 +344,7 @@ def _save_outage_state(prev_balance):
 
 
 def _mark_outage_notified():
-    """Mark that the outage notification has already been sent."""
+    """Mark that outage notification was sent."""
     outage = _load_outage_state()
     if outage:
         outage["notification_sent"] = True
@@ -388,7 +353,7 @@ def _mark_outage_notified():
 
 
 def _clear_outage_state():
-    """Remove the outage file, signalling recovery."""
+    """Clear outage file on recovery."""
     try:
         os.remove(OUTAGE_FILE)
     except OSError:
@@ -406,19 +371,14 @@ def fmt_eur(val):
 
 
 def send_telegram(token, chat_id, title, message):
-    """Send a push notification via Telegram Bot API."""
+    """Send push notification via Telegram Bot API."""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    # Format message with bold title
     text = f"<b>{title}</b>\n\n{message}"
     try:
         r = requests.post(
             url,
-            json={
-                "chat_id": chat_id,
-                "text": text,
-                "parse_mode": "HTML"
-            },
-            timeout=10
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=10,
         )
         if r.status_code == 200:
             log.info(f"Telegram notification sent: {title}")
@@ -433,14 +393,12 @@ def send_telegram(token, chat_id, title, message):
 
 def send_notification(topic, title, message, tags=None, priority=None):
     """Send a push notification via ntfy.sh and/or Telegram."""
-    # 1. Try sending via Telegram if credentials are set
     tg_token = os.getenv("TELEGRAM_TOKEN", "").strip()
     tg_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     tg_success = False
     if tg_token and tg_chat_id:
         tg_success = send_telegram(tg_token, tg_chat_id, title, message)
 
-    # 2. Try sending via ntfy
     url = f"{NTFY_URL}"
     payload = {
         "topic": topic,
@@ -450,7 +408,7 @@ def send_notification(topic, title, message, tags=None, priority=None):
     if tags:
         payload["tags"] = [tags] if isinstance(tags, str) else tags
     if priority:
-        payload["priority"] = 3  # default priority
+        payload["priority"] = 3
 
     headers = {"Content-Type": "application/json"}
     token = os.getenv("NTFY_TOKEN", "").strip()
@@ -459,12 +417,7 @@ def send_notification(topic, title, message, tags=None, priority=None):
 
     ntfy_success = False
     try:
-        r = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=10
-        )
+        r = requests.post(url, json=payload, headers=headers, timeout=10)
         if r.status_code == 200:
             log.info(f"ntfy notification sent: {title}")
             ntfy_success = True
@@ -476,38 +429,27 @@ def send_notification(topic, title, message, tags=None, priority=None):
     return tg_success or ntfy_success
 
 
-def notify_transaction(topic, tx, balance_total):
-    """Send a notification for a single transaction.
-
-    Args:
-        topic: ntfy / Telegram topic
-        tx: transaction dict with amount, description
-        balance_total: running balance AFTER this transaction (float)
-    """
+def notify_transaction(topic, tx, balance_after):
+    """Send a notification for a single transaction."""
     is_credit = tx["amount"] > 0
-
-    if is_credit:
-        emoji = "green_circle"
-        title = "Pluxee — Carregamento"
-    else:
-        emoji = "red_circle"
-        title = "Pluxee — Gasto"
+    emoji = "🟢" if is_credit else "🔴"
+    tag = "green_circle" if is_credit else "red_circle"
+    title = f"{emoji} Pluxee — {'Carregamento' if is_credit else 'Gasto'}"
 
     amount_str = fmt_eur(tx["amount"])
-    total_str = fmt_eur(balance_total)
+    balance_str = fmt_eur(balance_after)
 
     message = (
         f"{tx['description']}\n"
-        f"{amount_str}\n"
-        f"\n"
-        f"💰 Saldo restante: {total_str}"
+        f"{amount_str}\n\n"
+        f"💰 Saldo restante: {balance_str}"
     )
 
     send_notification(
         topic=topic,
         title=title,
         message=message,
-        tags=emoji,
+        tags=tag,
         priority="default",
     )
 
@@ -518,8 +460,8 @@ def send_test_notification(topic):
         topic=topic,
         title="🔔 Pluxee Monitor — Teste",
         message=(
-            "O monitor de notificações está a funcionar!\n"
-            "Irá receber alertas sempre que houver novas transações."
+            "O monitor Pluxee Mobile API está a funcionar!\n"
+            "Irá receber alertas automáticos sempre que houver novas transações."
         ),
         tags="white_check_mark",
         priority="default",
@@ -530,14 +472,14 @@ def send_test_notification(topic):
 # ---------------------------------------------------------------------------
 
 def write_pid():
-    """Write the current PID to the PID file."""
+    """Write current PID to file."""
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
 
 
 def read_pid():
-    """Read the PID from the PID file. Returns None if not found."""
+    """Read PID from file."""
     if not os.path.exists(PID_FILE):
         return None
     try:
@@ -548,7 +490,7 @@ def read_pid():
 
 
 def remove_pid():
-    """Remove the PID file."""
+    """Remove PID file."""
     try:
         os.remove(PID_FILE)
     except OSError:
@@ -556,12 +498,12 @@ def remove_pid():
 
 
 def is_monitor_running():
-    """Check if a monitor process is currently running."""
+    """Check if monitor process is running."""
     pid = read_pid()
     if pid is None:
         return False
     try:
-        os.kill(pid, 0)  # Check if process exists
+        os.kill(pid, 0)
         return True
     except OSError:
         remove_pid()
@@ -572,163 +514,107 @@ def is_monitor_running():
 # ---------------------------------------------------------------------------
 
 def check_for_new_transactions(config):
-    """Check Pluxee for new transactions and send notifications for any found.
-
-    Includes outage detection: if the API returns empty data when we previously
-    had transactions and balance, we assume the system is down and skip all
-    notifications and state updates to prevent false alarms and recovery spam.
-
-    Returns (new_count, balance) tuple.
-    """
-    log.info("Checking for new transactions...")
+    """Check Pluxee for new transactions via Mobile API and notify."""
+    log.info("Checking for new transactions via Pluxee Mobile API...")
 
     try:
-        result = fetch_all(config["nif"], config["password"])
-    except ValueError as e:
-        log.error(f"Login/fetch error: {e}")
+        result = fetch_all(config["api_claim"], config["card_id"], config["benefit_id"], num=20)
+    except PluxeeAuthError as e:
+        log.error(f"Authentication error: {e}")
+        send_notification(
+            topic=config["topic"],
+            title="⚠️ Pluxee — Sessão Expirada",
+            message=(
+                "A sessão da API móvel do Pluxee expirou (401).\n"
+                "Por favor, atualize o PLUXEE_API_CLAIM nas definições."
+            ),
+            tags="warning",
+        )
         return 0, None
-    except requests.exceptions.ConnectionError as e:
+    except PluxeeConnectionError as e:
         log.error(f"Connection error: {e}")
         return 0, None
     except Exception as e:
-        log.error(f"Unexpected error: {e}")
+        log.error(f"Unexpected API error: {e}")
         return 0, None
 
     current_balance = result["balance"]
     current_txs = result["transactions"]
     total = sum(current_balance.values())
 
-    log.info(f"Fetched {len(current_txs)} transactions. Balance: €{total:.2f}")
+    log.info(f"Fetched {len(current_txs)} transactions. Current balance: €{total:.2f}")
 
-    # Load previous state
     prev_state = load_state()
 
     if prev_state is None:
-        # First run — save state, don't notify (we don't know what's "new")
         log.info("First run — saving initial state (no notifications sent)")
         save_state(current_balance, current_txs)
         return 0, current_balance
 
-    # ----- Outage detection -----
+    # Outage detection
     outage_state = _load_outage_state()
-
     if _looks_like_outage(current_balance, current_txs, prev_state):
-        # API appears to be down — don't save state, don't notify about changes
         if outage_state is None:
-            # First detection of this outage
             prev_balance = prev_state.get("balance", {})
             outage_state = _save_outage_state(prev_balance)
-            log.warning("⚠️  Outage detected! API returned empty data. "
-                        "Skipping state update to prevent false notifications.")
-            # Send a single "system down" notification
+            log.warning("⚠️ Outage detected! API returned empty data. Skipping notifications.")
             prev_total = sum(prev_balance.values())
             send_notification(
                 topic=config["topic"],
                 title="⚠️ Pluxee — Sistema indisponível",
                 message=(
                     f"O sistema Pluxee parece estar em baixo.\n"
-                    f"Dados devolvidos sem saldo e sem transações.\n"
-                    f"\n"
-                    f"As notificações estão pausadas até o sistema recuperar.\n"
+                    f"As notificações estão pausadas até o sistema recuperar.\n\n"
                     f"💰 Último saldo conhecido: {fmt_eur(prev_total)}"
                 ),
                 tags="warning",
             )
             _mark_outage_notified()
         else:
-            log.warning("⚠️  Outage still ongoing. Skipping check. "
-                        f"(down since {outage_state.get('detected_at', 'unknown')})")
+            log.warning("⚠️ Outage still ongoing. Skipping check.")
         return 0, None
 
-    # ----- Recovery from outage -----
+    # Recovery from outage
     if outage_state is not None:
-        # System is back! We have real data again.
-        detected_at = outage_state.get("detected_at", "unknown")
-        log.info(f"✅ System recovered! Outage started at {detected_at}. "
-                 "Reconciling state silently.")
+        log.info("✅ System recovered! Reconciling state silently.")
         _clear_outage_state()
-        # Send a single "recovered" notification
         send_notification(
             topic=config["topic"],
             title="✅ Pluxee — Sistema recuperado",
-            message=(
-                f"O sistema Pluxee está novamente operacional.\n"
-                f"\n"
-                f"💰 Saldo atual: {fmt_eur(total)}"
-            ),
+            message=f"O sistema Pluxee está novamente operacional.\n\n💰 Saldo atual: {fmt_eur(total)}",
             tags="white_check_mark",
         )
-        # Save the current (recovered) state without sending per-transaction
-        # notifications — the transactions aren't truly "new", they just
-        # reappeared after the outage.
         save_state(current_balance, current_txs)
         return 0, current_balance
-
-    # ----- Normal flow (no outage) -----
 
     # Compare transactions by fingerprint
     if "fingerprints" in prev_state:
         prev_fingerprints = set(prev_state["fingerprints"])
     else:
-        prev_fingerprints = set(
-            _tx_fingerprint(tx) for tx in prev_state.get("transactions", [])
-        )
+        prev_fingerprints = set(_tx_fingerprint(tx) for tx in prev_state.get("transactions", []))
     current_fingerprints = set(_tx_fingerprint(tx) for tx in current_txs)
 
     new_fingerprints = current_fingerprints - prev_fingerprints
-    new_txs = [
-        tx for tx in current_txs
-        if _tx_fingerprint(tx) in new_fingerprints
-    ]
+    new_txs = [tx for tx in current_txs if _tx_fingerprint(tx) in new_fingerprints]
 
     prev_balance = prev_state.get("balance", {})
     prev_total = sum(prev_balance.values())
 
-    # Detect if the balance has not updated yet to reflect the new transactions.
-    # If we have new transactions but the balance has not changed, we perform a
-    # quick, short retry loop (sleeping for 5 seconds and recheck via portal/API)
-    # to obtain the updated balance immediately.
-    if new_txs and abs(total - prev_total) < 0.01:
-        log.info("New transactions found, but balance is still stale. Re-checking balance...")
-        for attempt in range(3):
-            # Sleep a bit to allow Pluxee portal to process the update
-            time.sleep(5)
-            try:
-                # Recheck balance using the scraper API
-                fresh_result = fetch_all(config["nif"], config["password"])
-                fresh_balance = fresh_result["balance"]
-                fresh_total = sum(fresh_balance.values())
-                
-                # If balance changed, use it
-                if abs(fresh_total - prev_total) >= 0.01:
-                    log.info(f"Balance updated to €{fresh_total:.2f} on attempt {attempt + 1}.")
-                    current_balance = fresh_balance
-                    total = fresh_total
-                    break
-                log.info(f"Balance is still stale on attempt {attempt + 1}. Retrying in 5s...")
-            except Exception as e:
-                log.warning(f"Re-check attempt {attempt + 1} failed: {e}")
-
     if new_txs:
         log.info(f"Found {len(new_txs)} new transaction(s)!")
-        # Process in chronological order (portal usually lists newest first)
+        # Process chronologically (newest at top of API, so reverse to notify oldest first)
         new_txs_chrono = list(reversed(new_txs))
-        # Use the fetched portal balance directly (no manual sums/subtractions)
         for tx in new_txs_chrono:
-            notify_transaction(config["topic"], tx, total)
+            # Use exact running balance provided by Mobile API if available
+            bal_after = tx["balance"] if tx.get("balance") is not None else total
+            notify_transaction(config["topic"], tx, bal_after)
     else:
         log.info("No new transactions found.")
 
-    # Also check for balance changes without visible transactions
+    # Check for balance changes without transactions
     if abs(total - prev_total) > 0.01 and not new_txs:
-        # Guard: balance dropping to exactly €0 with no new transactions is
-        # almost certainly a partial portal outage (stale transactions
-        # returned with a broken balance), not a real balance change.
         if total == 0 and prev_total > 1.0:
-            log.warning(
-                "Balance dropped to €0,00 with no new transactions — "
-                "likely a portal glitch. Skipping notification and state save."
-            )
+            log.warning("Balance dropped to €0.00 with no new transactions — likely transient glitch. Skipping.")
             return 0, None
 
         diff = total - prev_total
@@ -736,11 +622,7 @@ def check_for_new_transactions(config):
         send_notification(
             topic=config["topic"],
             title=f"Pluxee — Saldo {direction}",
-            message=(
-                f"O saldo alterou {fmt_eur(diff)}\n"
-                f"\n"
-                f"💰 Saldo atual: {fmt_eur(total)}"
-            ),
+            message=f"O saldo alterou {fmt_eur(diff)}\n\n💰 Saldo atual: {fmt_eur(total)}",
             tags="chart_with_upwards_trend" if diff > 0 else "chart_with_downwards_trend",
         )
 
@@ -779,7 +661,6 @@ def run_loop(config):
             except Exception as e:
                 log.error(f"Check failed: {e}")
 
-            # Sleep in small increments so we can respond to signals
             for _ in range(interval):
                 if not _running:
                     break
@@ -788,13 +669,12 @@ def run_loop(config):
         remove_pid()
         log.info("Monitor stopped.")
 
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="Pluxee Transaction Monitor")
+    parser = argparse.ArgumentParser(description="Pluxee Transaction Monitor (Mobile API)")
     parser.add_argument("--once", action="store_true", help="Run a single check and exit")
     parser.add_argument("--test", action="store_true", help="Send a test notification and exit")
     parser.add_argument("--status", action="store_true", help="Check if the monitor is running")
@@ -833,7 +713,6 @@ def main():
             print(f"Check complete. {count} new transaction(s). Balance: €{total:.2f}")
         return
 
-    # Default: run continuous loop
     if is_monitor_running():
         pid = read_pid()
         log.error(f"Monitor is already running (PID: {pid}). Use --stop first.")

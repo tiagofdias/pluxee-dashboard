@@ -1,0 +1,211 @@
+{
+  "updated_at": "2026-09-27T18:03:43.680700+00:00",
+  "balance": {
+    "lunch_pass": 273.8,
+    "eco_pass": 0.0,
+    "gift_pass": 0.0,
+    "conso_pass": 0.0
+  },
+  "transactions": [
+    {
+      "date": "24/09/2026",
+      "description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "amount": 211.86,
+      "balance": 273.8,
+      "currency": "EUR",
+      "effective_date": null,
+      "raw_description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "is_rejected": false
+    },
+    {
+      "date": "22/09/2026",
+      "description": "SOLSTICIO MEL",
+      "amount": -15.0,
+      "balance": 61.94,
+      "currency": "EUR",
+      "effective_date": "23/09/2026",
+      "raw_description": "Compra SOLSTICIO MEL,1050-007 LISB,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "22/09/2026",
+      "description": "MCDONALDS SALDANHA",
+      "amount": -1.9,
+      "balance": 76.94,
+      "currency": "EUR",
+      "effective_date": "23/09/2026",
+      "raw_description": "Compra MCDONALDS SALDANHA,1050-191 LISB,PR",
+      "is_rejected": false
+    },
+    {
+      "date": "20/09/2026",
+      "description": "Glovo 20SEP LIHLB1D5C",
+      "amount": -29.09,
+      "balance": 78.84,
+      "currency": "EUR",
+      "effective_date": "21/09/2026",
+      "raw_description": "Compra Glovo 20SEP LIHLB1D5C,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "16/09/2026",
+      "description": "ITALY  CAFFEE",
+      "amount": -12.35,
+      "balance": 107.93,
+      "currency": "EUR",
+      "effective_date": "17/09/2026",
+      "raw_description": "Compra ITALY  CAFFEE,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "08/09/2026",
+      "description": "Glovo 08SEP LIHD12HLN",
+      "amount": -8.08,
+      "balance": 120.28,
+      "currency": "EUR",
+      "effective_date": "09/09/2026",
+      "raw_description": "Compra Glovo 08SEP LIHD12HLN,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "05/09/2026",
+      "description": "FABRICA RODIZIO PICA",
+      "amount": -25.95,
+      "balance": 128.36,
+      "currency": "EUR",
+      "effective_date": "07/09/2026",
+      "raw_description": "Compra FABRICA RODIZIO PICA,ODIVELAS,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "02/09/2026",
+      "description": "POW CHICKS SALDANHA",
+      "amount": -13.0,
+      "balance": 154.31,
+      "currency": "EUR",
+      "effective_date": "03/09/2026",
+      "raw_description": "Compra POW CHICKS SALDANHA,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "01/09/2026",
+      "description": "Glovo 01SEP LI1W2JVDY",
+      "amount": -14.19,
+      "balance": 167.31,
+      "currency": "EUR",
+      "effective_date": "02/09/2026",
+      "raw_description": "Compra Glovo 01SEP LI1W2JVDY,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "31/08/2026",
+      "description": "Glovo 31AUG LID1UUF2S",
+      "amount": -16.11,
+      "balance": 181.5,
+      "currency": "EUR",
+      "effective_date": "01/09/2026",
+      "raw_description": "Compra Glovo 31AUG LID1UUF2S,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "31/08/2026",
+      "description": "Glovo GLOVO PRIME",
+      "amount": -4.99,
+      "balance": 197.61,
+      "currency": "EUR",
+      "effective_date": "31/08/2026",
+      "raw_description": "Compra Glovo GLOVO PRIME,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "26/08/2026",
+      "description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "amount": 202.23,
+      "balance": 202.6,
+      "currency": "EUR",
+      "effective_date": null,
+      "raw_description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "is_rejected": false
+    },
+    {
+      "date": "12/08/2026",
+      "description": "CONTINENTE",
+      "amount": -110.0,
+      "balance": 0.37,
+      "currency": "EUR",
+      "effective_date": "13/08/2026",
+      "raw_description": "Compra CONTINENTE,Portugal,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "09/08/2026",
+      "description": "Glovo 09AUG LIX6ARZUQ",
+      "amount": -9.19,
+      "balance": 110.37,
+      "currency": "EUR",
+      "effective_date": "10/08/2026",
+      "raw_description": "Compra Glovo 09AUG LIX6ARZUQ,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "03/08/2026",
+      "description": "Glovo 03AUG LIDJAZG5J",
+      "amount": -47.31,
+      "balance": 119.56,
+      "currency": "EUR",
+      "effective_date": "04/08/2026",
+      "raw_description": "Compra Glovo 03AUG LIDJAZG5J,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "02/08/2026",
+      "description": "Glovo 02AUG LI6LKNZ31",
+      "amount": -9.19,
+      "balance": 166.87,
+      "currency": "EUR",
+      "effective_date": "03/08/2026",
+      "raw_description": "Compra Glovo 02AUG LI6LKNZ31,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "31/07/2026",
+      "description": "Glovo 31JUL LI3AHLPNE",
+      "amount": -10.1,
+      "balance": 176.06,
+      "currency": "EUR",
+      "effective_date": "01/08/2026",
+      "raw_description": "Compra Glovo 31JUL LI3AHLPNE,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "31/07/2026",
+      "description": "Glovo GLOVO PRIME",
+      "amount": -4.99,
+      "balance": 186.16,
+      "currency": "EUR",
+      "effective_date": "01/08/2026",
+      "raw_description": "Compra Glovo GLOVO PRIME,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "30/07/2026",
+      "description": "GLOVO30JUL LIZMH14V9",
+      "amount": -19.65,
+      "balance": 191.15,
+      "currency": "EUR",
+      "effective_date": "31/07/2026",
+      "raw_description": "Compra GLOVO30JUL LIZMH14V9,none,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "29/07/2026",
+      "description": "A R BICHO   MARQUES",
+      "amount": -14.0,
+      "balance": 210.8,
+      "currency": "EUR",
+      "effective_date": "30/07/2026",
+      "raw_description": "Compra A R BICHO   MARQUES,30-32 - LISBO,P",
+      "is_rejected": false
+    }
+  ]
+}

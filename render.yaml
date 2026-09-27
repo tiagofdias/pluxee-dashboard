@@ -7,10 +7,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
-      - key: PLUXEE_NIF
+      - key: PLUXEE_API_CLAIM
         sync: false  # Set manually in Render dashboard
-      - key: PLUXEE_PASSWORD
-        sync: false
+      - key: PLUXEE_CARD_ID
+        value: "bHnxCGNGTfJEdgXDz4paOPlcAr6fOsEDgIgkE84nDT8%3DslEA7yYOHkT0tOM3"
+      - key: PLUXEE_BENEFIT_ID
+        value: "Fjzuh5HrgzFxK%2FWm9BXIAQ%3D%3DX0kllae3G4hK4L3I"
       - key: NTFY_TOPIC
         value: pluxee-tiago-a7x9k2
       - key: CRON_SECRET

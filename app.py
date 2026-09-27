@@ -1,30 +1,25 @@
 """Pluxee Portugal Balance Dashboard — Flask Backend
 
-Uses the shared pluxee_scraper module for portal scraping.
-Includes API endpoints for the notification monitor control.
+Uses the official Pluxee Portugal Mobile API (pluxee_api module).
+Provides REST API endpoints for balance, transactions, and background notification monitor control.
 Works both locally (with .env file) and on Render (with dashboard env vars).
 """
 
 import os
-import re
 import json
 import signal
 import subprocess
 import traceback
 from datetime import datetime, timezone
 
-import requests
-from bs4 import BeautifulSoup
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
-import pluxee_scraper
+import pluxee_api
 
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-BASE_URL = "https://portal.admin.pluxee.pt"
-DEBUG_DIR = os.path.join(os.path.dirname(__file__), "debug")
 MONITOR_SCRIPT = os.path.join(os.path.dirname(__file__), "monitor.py")
 IS_RENDER = bool(os.getenv("RENDER"))
 
@@ -47,12 +42,10 @@ STATE_FILE = os.path.join(DATA_DIR, "transactions.json")
 
 def _get_env(key, default=""):
     """Get a config value: checks os.getenv() first, then .env file."""
-    # os.getenv() covers Render dashboard vars + real environment
     val = os.getenv(key, "").strip()
     if val:
         return val
 
-    # Fallback: try .env file (local dev)
     env_path = os.path.join(os.path.dirname(__file__), ".env")
     if os.path.exists(env_path):
         try:
@@ -72,7 +65,7 @@ def _get_env(key, default=""):
 def _save_env(env_vars):
     """Save env vars to .env file (local dev only, no-op on Render)."""
     if IS_RENDER:
-        return  # On Render, env vars are managed via the dashboard
+        return
 
     env_path = os.path.join(os.path.dirname(__file__), ".env")
     lines = []
@@ -116,55 +109,50 @@ def favicon():
     return "", 204
 
 
+@app.route("/style.css")
+def serve_css():
+    return send_from_directory("static", "style.css")
+
+
+@app.route("/app.js")
+def serve_js():
+    return send_from_directory("static", "app.js")
+
+
+@app.route("/data.json")
+def serve_data():
+    return send_from_directory("static", "data.json")
+
+
+
 @app.route("/api/balance", methods=["POST"])
 def get_balance():
-    """Fetch the Pluxee balance using provided credentials (NIF + password)."""
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No JSON data provided"}), 400
+    """Fetch Pluxee balance and transactions via Mobile API."""
+    data = request.get_json() or {}
 
-    nif = data.get("username", "").strip()
-    password = data.get("password", "").strip()
+    api_claim = data.get("api_claim", "").strip() or _get_env("PLUXEE_API_CLAIM")
+    card_id = data.get("card_id", "").strip() or _get_env("PLUXEE_CARD_ID")
+    benefit_id = data.get("benefit_id", "").strip() or _get_env("PLUXEE_BENEFIT_ID")
 
-    if not nif or not password:
-        return jsonify({"error": "NIF and password are required"}), 400
+    if not api_claim or not card_id or not benefit_id:
+        return jsonify({
+            "error": "Credenciais da API Móvel necessárias (PLUXEE_API_CLAIM, PLUXEE_CARD_ID, PLUXEE_BENEFIT_ID)."
+        }), 400
 
     try:
-        session, soup, dash_url = pluxee_scraper.login(nif, password)
-        balance = pluxee_scraper.fetch_balance(session, soup)
-        transactions = pluxee_scraper.fetch_transactions(soup)
-
-        # Extract values for debug response
-        all_vals_debug = []
-        page_text_debug = soup.get_text()
-        euro_pattern_debug = re.compile(r'(\d+[.,]\d{2})\s*€|€\s*(\d+[.,]\d{2})')
-        for m in euro_pattern_debug.finditer(page_text_debug):
-            val_str = m.group(1) or m.group(2)
-            try:
-                all_vals_debug.append(float(val_str.replace(",", ".")))
-            except ValueError:
-                pass
-
+        result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=20)
         return jsonify({
             "success": True,
-            "balance": balance,
-            "transactions": transactions,
-            "debug": {
-                "dashboard_url": dash_url,
-                "page_title": soup.title.string if soup.title else None,
-                "amounts_found": all_vals_debug,
-            }
+            "balance": result["balance"],
+            "transactions": result["transactions"],
         })
-
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 401
-    except requests.exceptions.ConnectionError as e:
-        print(f"[CONNECTION ERROR] {e}")
-        return jsonify({"error": "Could not connect to Pluxee. Please check your internet connection."}), 502
+    except pluxee_api.PluxeeAuthError as e:
+        return jsonify({"error": f"Sessão expirada ou não autorizada: {str(e)}"}), 401
+    except pluxee_api.PluxeeConnectionError as e:
+        return jsonify({"error": f"Erro de ligação aos servidores da Pluxee: {str(e)}"}), 502
     except Exception as e:
-        print(f"[UNEXPECTED ERROR] {type(e).__name__}: {e}")
         traceback.print_exc()
-        return jsonify({"error": f"{type(e).__name__}: {str(e)}"}), 500
+        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
 
 
 # ===========================================================================
@@ -206,7 +194,9 @@ def notification_status():
 
     topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
     interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
-    has_creds = bool(_get_env("PLUXEE_NIF") and _get_env("PLUXEE_PASSWORD"))
+    has_creds = bool(
+        _get_env("PLUXEE_API_CLAIM") and _get_env("PLUXEE_CARD_ID") and _get_env("PLUXEE_BENEFIT_ID")
+    )
     has_token = bool(os.getenv("NTFY_TOKEN"))
     has_telegram = bool(os.getenv("TELEGRAM_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"))
 
@@ -245,30 +235,30 @@ def notification_status():
 
 @app.route("/api/notifications/start", methods=["POST"])
 def notification_start():
-    """Start the background monitor.
-
-    On Render: triggers a single cron check immediately (cron-job.org handles the loop).
-    Locally: starts monitor.py as a background subprocess.
-    """
+    """Start the background monitor."""
     data = request.get_json() or {}
 
-    nif = data.get("nif", "").strip() or _get_env("PLUXEE_NIF")
-    password = data.get("password", "").strip() or _get_env("PLUXEE_PASSWORD")
+    api_claim = data.get("api_claim", "").strip() or _get_env("PLUXEE_API_CLAIM")
+    card_id = data.get("card_id", "").strip() or _get_env("PLUXEE_CARD_ID")
+    benefit_id = data.get("benefit_id", "").strip() or _get_env("PLUXEE_BENEFIT_ID")
     topic = data.get("topic", "").strip() or _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
+    interval = int(data.get("interval", 0) or _get_env("POLL_INTERVAL_SECONDS", "300"))
 
-    if not nif or not password:
-        return jsonify({"error": "Credentials required. Set PLUXEE_NIF and PLUXEE_PASSWORD."}), 400
+    if not api_claim or not card_id or not benefit_id:
+        return jsonify({"error": "Credenciais da API Móvel necessárias (PLUXEE_API_CLAIM, etc.)."}), 400
+
+    config = {
+        "api_claim": api_claim,
+        "card_id": card_id,
+        "benefit_id": benefit_id,
+        "topic": topic,
+        "interval": interval,
+    }
 
     if IS_RENDER:
-        # On Render: run one check now, cron-job.org handles the rest
+        # On Render: run one check immediately (cron handles periodic runs)
         try:
             from monitor import check_for_new_transactions
-            config = {
-                "nif": nif,
-                "password": password,
-                "topic": topic,
-                "interval": 300,
-            }
             count, balance = check_for_new_transactions(config)
             total = sum(balance.values()) if balance else 0
             return jsonify({
@@ -288,10 +278,11 @@ def notification_start():
             return jsonify({"error": "Monitor is already running", "running": True}), 409
 
         _save_env({
-            "PLUXEE_NIF": nif,
-            "PLUXEE_PASSWORD": password,
+            "PLUXEE_API_CLAIM": api_claim,
+            "PLUXEE_CARD_ID": card_id,
+            "PLUXEE_BENEFIT_ID": benefit_id,
             "NTFY_TOPIC": topic,
-            "POLL_INTERVAL_SECONDS": str(data.get("interval", 300)),
+            "POLL_INTERVAL_SECONDS": str(interval),
         })
 
         try:
@@ -365,10 +356,12 @@ def notification_config():
         return jsonify({"error": "No JSON data provided"}), 400
 
     env_updates = {}
-    if "nif" in data:
-        env_updates["PLUXEE_NIF"] = data["nif"].strip()
-    if "password" in data:
-        env_updates["PLUXEE_PASSWORD"] = data["password"].strip()
+    if "api_claim" in data:
+        env_updates["PLUXEE_API_CLAIM"] = data["api_claim"].strip()
+    if "card_id" in data:
+        env_updates["PLUXEE_CARD_ID"] = data["card_id"].strip()
+    if "benefit_id" in data:
+        env_updates["PLUXEE_BENEFIT_ID"] = data["benefit_id"].strip()
     if "topic" in data:
         env_updates["NTFY_TOPIC"] = data["topic"].strip()
     if "interval" in data:
@@ -386,38 +379,36 @@ def notification_config():
 
 @app.route("/ping", methods=["GET"])
 def ping():
-    """Health check endpoint — use with external cron to keep Render alive."""
+    """Health check endpoint — keep Render alive."""
     return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 
 @app.route("/api/cron/check", methods=["GET", "POST"])
 def cron_check():
-    """Endpoint for external cron services to trigger a transaction check.
-
-    Set up cron-job.org to hit this every 5 minutes.
-    Optionally protect with a secret: ?secret=YOUR_CRON_SECRET
-    """
-    # Optional secret protection
+    """Endpoint for external cron services to trigger a transaction check."""
     cron_secret = os.getenv("CRON_SECRET", "")
     if cron_secret:
         provided = request.args.get("secret", "") or (request.get_json() or {}).get("secret", "")
         if provided != cron_secret:
             return jsonify({"error": "Invalid secret"}), 403
 
-    nif = _get_env("PLUXEE_NIF")
-    password = _get_env("PLUXEE_PASSWORD")
+    api_claim = _get_env("PLUXEE_API_CLAIM")
+    card_id = _get_env("PLUXEE_CARD_ID")
+    benefit_id = _get_env("PLUXEE_BENEFIT_ID")
     topic = _get_env("NTFY_TOPIC", "pluxee-tiago-a7x9k2")
+    interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
 
-    if not nif or not password:
-        return jsonify({"error": "PLUXEE_NIF and PLUXEE_PASSWORD not configured"}), 500
+    if not api_claim or not card_id or not benefit_id:
+        return jsonify({"error": "PLUXEE_API_CLAIM, PLUXEE_CARD_ID, and PLUXEE_BENEFIT_ID not configured"}), 500
 
     try:
         from monitor import check_for_new_transactions
         config = {
-            "nif": nif,
-            "password": password,
+            "api_claim": api_claim,
+            "card_id": card_id,
+            "benefit_id": benefit_id,
             "topic": topic,
-            "interval": 300,
+            "interval": interval,
         }
         count, balance = check_for_new_transactions(config)
         total = sum(balance.values()) if balance else 0
