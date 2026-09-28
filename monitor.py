@@ -19,7 +19,7 @@ import hashlib
 import io
 import argparse
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import requests
 
@@ -226,11 +226,14 @@ def _clear_outage_state():
 # Telegram Notifications
 # ---------------------------------------------------------------------------
 
-def fmt_eur(val):
+def fmt_eur(val, show_sign=False):
     """Format a float as a Euro string like €12,34."""
-    sign = "+" if val > 0 else ""
     formatted = f"{abs(val):,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
-    return f"{sign}€{formatted}" if val >= 0 else f"-€{formatted}"
+    if val < 0:
+        return f"-€{formatted}"
+    if show_sign and val > 0:
+        return f"+€{formatted}"
+    return f"€{formatted}"
 
 
 def send_notification(title, message):
@@ -269,7 +272,7 @@ def notify_transaction(tx, balance_after):
         title = "🔴 Pluxee — Pagamento Efetuado"
         balance_label = "Saldo restante"
 
-    amount_str = fmt_eur(tx["amount"])
+    amount_str = fmt_eur(tx["amount"], show_sign=True)
     balance_str = fmt_eur(balance_after)
 
     message = (
@@ -313,46 +316,117 @@ def send_telegram_direct(config, chat_id, text):
         return False
 
 
+def calculate_financial_stats(transactions):
+    """Calculate weekly spend, last month spend, monthly average spend, and average monthly savings."""
+    if not transactions:
+        return {
+            "this_week": 0.0,
+            "last_month": 0.0,
+            "last_month_name": "Mês passado",
+            "monthly_avg": 0.0,
+            "avg_savings": 0.0,
+            "last_savings": 0.0,
+            "last_deposit_date": "",
+        }
+
+    def parse_d(d_str):
+        try:
+            return datetime.strptime(d_str, "%d/%m/%Y").date()
+        except Exception:
+            return None
+
+    today = datetime.now().date()
+    monday = today - timedelta(days=today.weekday())
+
+    # 1. Total spend this week (Monday to today)
+    this_week_spend = sum(
+        abs(t["amount"]) for t in transactions
+        if t.get("amount", 0) < 0 and parse_d(t.get("date", "")) and parse_d(t["date"]) >= monday
+    )
+
+    # 2. Total spend last month
+    first_of_this_month = today.replace(day=1)
+    last_day_of_prev_month = first_of_this_month - timedelta(days=1)
+    prev_month = last_day_of_prev_month.month
+    prev_month_year = last_day_of_prev_month.year
+
+    month_names = {
+        1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+        5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+        9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+    }
+    last_month_name = month_names.get(prev_month, f"Mês {prev_month}")
+
+    last_month_spend = sum(
+        abs(t["amount"]) for t in transactions
+        if t.get("amount", 0) < 0 and parse_d(t.get("date", ""))
+        and parse_d(t["date"]).month == prev_month
+        and parse_d(t["date"]).year == prev_month_year
+    )
+
+    # 3. Monthly average spend
+    monthly_spends = {}
+    for t in transactions:
+        if t.get("amount", 0) < 0:
+            d = parse_d(t.get("date", ""))
+            if d:
+                key = (d.year, d.month)
+                monthly_spends[key] = monthly_spends.get(key, 0.0) + abs(t["amount"])
+
+    monthly_avg = sum(monthly_spends.values()) / len(monthly_spends) if monthly_spends else 0.0
+
+    # 4. Average monthly savings (what rests before arriving another payment from company)
+    savings_list = []
+    last_savings = 0.0
+    last_deposit_date = ""
+
+    for i, t in enumerate(transactions):
+        desc = (t.get("description") or "").lower()
+        amt = t.get("amount", 0)
+        if amt > 50 or "carregamento" in desc:
+            if i + 1 < len(transactions):
+                prev_tx = transactions[i + 1]
+                bal_before = prev_tx.get("balance")
+                if bal_before is not None:
+                    savings_list.append(bal_before)
+                    if not last_deposit_date:
+                        last_savings = bal_before
+                        last_deposit_date = t.get("date", "")
+
+    avg_savings = sum(savings_list) / len(savings_list) if savings_list else 0.0
+
+    return {
+        "this_week": this_week_spend,
+        "last_month": last_month_spend,
+        "last_month_name": last_month_name,
+        "monthly_avg": monthly_avg,
+        "avg_savings": avg_savings,
+        "last_savings": last_savings,
+        "last_deposit_date": last_deposit_date,
+    }
+
+
 def format_balance_response(balance, transactions=None):
-    """Format a clean, readable balance summary for Telegram."""
-    total = sum(balance.values())
+    """Format the clean financial summary requested for Telegram (/balance)."""
+    total = sum(balance.values()) if isinstance(balance, dict) else float(balance)
     total_str = fmt_eur(total)
 
+    stats = calculate_financial_stats(transactions or [])
+
     lines = [
-        "💳 <b>Pluxee — Saldo Atual</b>",
-        "",
-        f"💰 <b>Total Disponível: {total_str}</b>",
+        "💳 <b>Pluxee — Saldo & Estatísticas</b>\n",
+        f"💰 <b>Saldo Atual:</b> <b>{total_str}</b>\n",
+        "📉 <b>Gastos:</b>",
+        f"• <b>Esta semana:</b> {fmt_eur(stats['this_week'])}",
+        f"• <b>Mês passado ({stats['last_month_name']}):</b> {fmt_eur(stats['last_month'])}",
+        f"• <b>Média mensal:</b> {fmt_eur(stats['monthly_avg'])}/mês\n",
+        "🐖 <b>Poupança Média Mensal:</b>",
+        f"• <b>Média residual:</b> <b>{fmt_eur(stats['avg_savings'])}</b>",
+        f"  <i>(o que sobra antes do novo carregamento da empresa)</i>",
     ]
 
-    lunch = balance.get("lunch_pass", 0.0)
-    eco = balance.get("eco_pass", 0.0)
-    gift = balance.get("gift_pass", 0.0)
-    conso = balance.get("conso_pass", 0.0)
-
-    pass_lines = []
-    if lunch > 0 or (eco == 0 and gift == 0 and conso == 0):
-        pass_lines.append(f"🍽️ Refeição: <b>{fmt_eur(lunch)}</b>")
-    if eco > 0:
-        pass_lines.append(f"🌿 Eco: <b>{fmt_eur(eco)}</b>")
-    if gift > 0:
-        pass_lines.append(f"🎁 Gift: <b>{fmt_eur(gift)}</b>")
-    if conso > 0:
-        pass_lines.append(f"🎫 Consumo: <b>{fmt_eur(conso)}</b>")
-
-    if pass_lines:
-        lines.append("")
-        lines.extend(pass_lines)
-
-    if transactions:
-        lines.append("")
-        lines.append("📊 <b>Últimos Movimentos:</b>")
-        for tx in transactions[:5]:
-            is_credit = tx.get("amount", 0) > 0
-            emoji = "🟢" if is_credit else "🔴"
-            amt = fmt_eur(tx.get("amount", 0))
-            desc = tx.get("description", "").strip()
-            date = tx.get("date", "").strip()
-            lines.append(f"{emoji} <code>{date}</code> <b>{amt}</b> — {desc}")
+    if stats["last_deposit_date"]:
+        lines.append(f"• <b>Último remanescente:</b> {fmt_eur(stats['last_savings'])} <i>(antes de {stats['last_deposit_date']})</i>")
 
     return "\n".join(lines)
 
@@ -362,7 +436,7 @@ def format_help_response():
     return (
         "👋 <b>Olá! Monitor Pluxee Cartão Refeição</b>\n\n"
         "Comandos disponíveis:\n"
-        "• /balance ou /saldo — Consulta o teu saldo atual e últimos movimentos.\n"
+        "• /balance ou /saldo — Consulta o teu saldo atual, gastos e poupança média.\n"
         "• /help ou /ajuda — Mostra esta mensagem de ajuda.\n\n"
         "🔔 Receberás notificações automáticas sempre que:\n"
         "• Fizeres um pagamento (🔴 Pagamento Efetuado)\n"
@@ -371,10 +445,13 @@ def format_help_response():
 
 
 def handle_balance_command(config, chat_id):
-    """Fetch live balance (or fallback to cached state) and reply to Telegram."""
+    """Fetch live balance and historical transactions to reply with full stats."""
     log.info(f"Handling /balance command for chat {chat_id}")
     balance = None
     transactions = None
+
+    state = load_state()
+    cached_txs = state.get("transactions", []) if state else []
 
     # 1. Try fetching live data from Pluxee API
     try:
@@ -382,18 +459,15 @@ def handle_balance_command(config, chat_id):
         card_id = config.get("card_id") or os.getenv("PLUXEE_CARD_ID", "").strip()
         benefit_id = config.get("benefit_id") or os.getenv("PLUXEE_BENEFIT_ID", "").strip()
         if api_claim and card_id and benefit_id:
-            result = fetch_all(api_claim, card_id, benefit_id, num=5)
+            result = fetch_all(api_claim, card_id, benefit_id, num=20)
             balance = result.get("balance")
             transactions = result.get("transactions")
     except Exception as e:
         log.warning(f"Could not fetch live balance from API: {e}")
 
-    # 2. Fall back to cached state if live fetch failed
-    if not balance:
-        state = load_state()
-        if state:
-            balance = state.get("balance")
-            transactions = state.get("transactions")
+    # Fall back to cached balance if API failed
+    if not balance and state:
+        balance = state.get("balance")
 
     if not balance:
         send_telegram_direct(
@@ -403,7 +477,16 @@ def handle_balance_command(config, chat_id):
         )
         return
 
-    text = format_balance_response(balance, transactions)
+    # Combine fetched and cached transactions for maximum history
+    all_txs = list(transactions or [])
+    seen_fps = set(_tx_fingerprint(t) for t in all_txs)
+    for t in cached_txs:
+        fp = _tx_fingerprint(t)
+        if fp not in seen_fps:
+            all_txs.append(t)
+            seen_fps.add(fp)
+
+    text = format_balance_response(balance, all_txs)
     send_telegram_direct(config, chat_id, text)
 
 
@@ -626,7 +709,7 @@ def check_for_new_transactions(config):
         diff = total - prev_total
         if diff > 0:
             title = "🟢 Pluxee — Carregamento Detetado"
-            msg = f"O seu cartão foi carregado com <b>{fmt_eur(diff)}</b>!\n\n💰 Novo saldo: <b>{fmt_eur(total)}</b>"
+            msg = f"O seu cartão foi carregado com <b>{fmt_eur(diff, show_sign=True)}</b>!\n\n💰 Novo saldo: <b>{fmt_eur(total)}</b>"
         else:
             title = "🔴 Pluxee — Saldo Atualizado"
             msg = f"O saldo diminuiu <b>{fmt_eur(abs(diff))}</b>.\n\n💰 Saldo restante: <b>{fmt_eur(total)}</b>"
