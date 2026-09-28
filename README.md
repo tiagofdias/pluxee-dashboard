@@ -43,6 +43,19 @@ A real-time balance dashboard and automated transaction monitor for **Pluxee Por
 >   
 > 💰 **Novo saldo:** `€273,80`
 
+### On-Demand Balance Query (/balance)
+> **User:** `/balance`  
+>  
+> **Bot:**  
+> 💳 **Pluxee — Saldo Atual**  
+>  
+> 💰 **Total Disponível: €273,80**  
+> 🍽️ Refeição: **€273,80**  
+>  
+> 📊 **Últimos Movimentos:**  
+> 🟢 `24/09` **+€211,86** — Carregamento de CAPGEMINI PORTUGAL SA  
+> 🔴 `22/09` **-€15,00** — SOLSTICIO MEL  
+
 ---
 
 ## 🚀 Quick Setup

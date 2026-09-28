@@ -372,6 +372,33 @@ def ping():
     return jsonify({"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()})
 
 
+@app.route("/api/telegram/webhook", methods=["POST"])
+def telegram_webhook():
+    """Telegram webhook endpoint for instant command processing (e.g. /balance)."""
+    data = request.get_json() or {}
+    msg = data.get("message")
+    if not msg:
+        return jsonify({"ok": True})
+
+    text = (msg.get("text") or "").strip()
+    chat_id = msg.get("chat", {}).get("id")
+    if not text or not chat_id:
+        return jsonify({"ok": True})
+
+    auth_chat_id = _get_env("TELEGRAM_CHAT_ID")
+    if auth_chat_id and str(chat_id) != str(auth_chat_id):
+        return jsonify({"ok": True})
+
+    try:
+        from monitor import handle_telegram_message, load_config
+        config = load_config()
+        handle_telegram_message(config, text, chat_id)
+    except Exception as e:
+        traceback.print_exc()
+
+    return jsonify({"ok": True})
+
+
 @app.route("/api/cron/check", methods=["GET", "POST"])
 def cron_check():
     """Endpoint for external cron services to trigger a transaction check."""
@@ -392,7 +419,7 @@ def cron_check():
         return jsonify({"error": "PLUXEE_API_CLAIM, PLUXEE_CARD_ID, and PLUXEE_BENEFIT_ID not configured"}), 500
 
     try:
-        from monitor import check_for_new_transactions
+        from monitor import check_for_new_transactions, process_telegram_updates
         config = {
             "api_claim": api_claim,
             "card_id": card_id,
@@ -401,7 +428,9 @@ def cron_check():
             "telegram_chat_id": telegram_chat_id,
             "interval": interval,
         }
+        process_telegram_updates(config, timeout=0)
         count, balance = check_for_new_transactions(config)
+        process_telegram_updates(config, timeout=0)
         total = sum(balance.values()) if balance else 0
 
         return jsonify({

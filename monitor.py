@@ -291,6 +291,195 @@ def send_test_notification():
         ),
     )
 
+
+# ---------------------------------------------------------------------------
+# Interactive Telegram Bot Commands (/balance, /help, etc.)
+# ---------------------------------------------------------------------------
+
+def send_telegram_direct(config, chat_id, text):
+    """Send a direct message to a specific chat_id."""
+    token = config.get("telegram_token") or os.getenv("TELEGRAM_TOKEN", "").strip()
+    if not token or not chat_id:
+        return False
+    try:
+        r = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=10,
+        )
+        return r.status_code == 200
+    except Exception as e:
+        log.error(f"Failed to send direct message to {chat_id}: {e}")
+        return False
+
+
+def format_balance_response(balance, transactions=None):
+    """Format a clean, readable balance summary for Telegram."""
+    total = sum(balance.values())
+    total_str = fmt_eur(total)
+
+    lines = [
+        "💳 <b>Pluxee — Saldo Atual</b>",
+        "",
+        f"💰 <b>Total Disponível: {total_str}</b>",
+    ]
+
+    lunch = balance.get("lunch_pass", 0.0)
+    eco = balance.get("eco_pass", 0.0)
+    gift = balance.get("gift_pass", 0.0)
+    conso = balance.get("conso_pass", 0.0)
+
+    pass_lines = []
+    if lunch > 0 or (eco == 0 and gift == 0 and conso == 0):
+        pass_lines.append(f"🍽️ Refeição: <b>{fmt_eur(lunch)}</b>")
+    if eco > 0:
+        pass_lines.append(f"🌿 Eco: <b>{fmt_eur(eco)}</b>")
+    if gift > 0:
+        pass_lines.append(f"🎁 Gift: <b>{fmt_eur(gift)}</b>")
+    if conso > 0:
+        pass_lines.append(f"🎫 Consumo: <b>{fmt_eur(conso)}</b>")
+
+    if pass_lines:
+        lines.append("")
+        lines.extend(pass_lines)
+
+    if transactions:
+        lines.append("")
+        lines.append("📊 <b>Últimos Movimentos:</b>")
+        for tx in transactions[:5]:
+            is_credit = tx.get("amount", 0) > 0
+            emoji = "🟢" if is_credit else "🔴"
+            amt = fmt_eur(tx.get("amount", 0))
+            desc = tx.get("description", "").strip()
+            date = tx.get("date", "").strip()
+            lines.append(f"{emoji} <code>{date}</code> <b>{amt}</b> — {desc}")
+
+    return "\n".join(lines)
+
+
+def format_help_response():
+    """Format help text for Telegram bot."""
+    return (
+        "👋 <b>Olá! Monitor Pluxee Cartão Refeição</b>\n\n"
+        "Comandos disponíveis:\n"
+        "• /balance ou /saldo — Consulta o teu saldo atual e últimos movimentos.\n"
+        "• /help ou /ajuda — Mostra esta mensagem de ajuda.\n\n"
+        "🔔 Receberás notificações automáticas sempre que:\n"
+        "• Fizeres um pagamento (🔴 Pagamento Efetuado)\n"
+        "• A tua empresa carregar o cartão (🟢 Carregamento Recebido)"
+    )
+
+
+def handle_balance_command(config, chat_id):
+    """Fetch live balance (or fallback to cached state) and reply to Telegram."""
+    log.info(f"Handling /balance command for chat {chat_id}")
+    balance = None
+    transactions = None
+
+    # 1. Try fetching live data from Pluxee API
+    try:
+        api_claim = config.get("api_claim") or os.getenv("PLUXEE_API_CLAIM", "").strip()
+        card_id = config.get("card_id") or os.getenv("PLUXEE_CARD_ID", "").strip()
+        benefit_id = config.get("benefit_id") or os.getenv("PLUXEE_BENEFIT_ID", "").strip()
+        if api_claim and card_id and benefit_id:
+            result = fetch_all(api_claim, card_id, benefit_id, num=5)
+            balance = result.get("balance")
+            transactions = result.get("transactions")
+    except Exception as e:
+        log.warning(f"Could not fetch live balance from API: {e}")
+
+    # 2. Fall back to cached state if live fetch failed
+    if not balance:
+        state = load_state()
+        if state:
+            balance = state.get("balance")
+            transactions = state.get("transactions")
+
+    if not balance:
+        send_telegram_direct(
+            config,
+            chat_id,
+            "⚠️ Não foi possível obter o saldo da Pluxee de momento. Tente novamente mais tarde.",
+        )
+        return
+
+    text = format_balance_response(balance, transactions)
+    send_telegram_direct(config, chat_id, text)
+
+
+def handle_telegram_message(config, text, chat_id):
+    """Handle an incoming Telegram text command."""
+    cmd = text.strip().lower()
+    if cmd.startswith("/balance") or cmd.startswith("/saldo"):
+        handle_balance_command(config, chat_id)
+        return True
+    elif cmd.startswith("/start") or cmd.startswith("/help") or cmd.startswith("/ajuda"):
+        send_telegram_direct(config, chat_id, format_help_response())
+        return True
+    return False
+
+
+def process_telegram_updates(config, offset=None, timeout=0):
+    """Fetch and process pending Telegram updates."""
+    token = config.get("telegram_token") or os.getenv("TELEGRAM_TOKEN", "").strip()
+    if not token:
+        return offset
+
+    try:
+        params = {"timeout": timeout}
+        if offset is not None:
+            params["offset"] = offset
+
+        r = requests.get(
+            f"https://api.telegram.org/bot{token}/getUpdates",
+            params=params,
+            timeout=timeout + 10,
+        )
+        if r.status_code != 200:
+            return offset
+
+        data = r.json()
+        if not data.get("ok"):
+            return offset
+
+        updates = data.get("result", [])
+        new_offset = offset
+
+        for upd in updates:
+            upd_id = upd.get("update_id")
+            if new_offset is None or upd_id >= new_offset:
+                new_offset = upd_id + 1
+
+            msg = upd.get("message")
+            if not msg:
+                continue
+
+            text = msg.get("text", "")
+            chat_id = msg.get("chat", {}).get("id")
+            if not text or not chat_id:
+                continue
+
+            # Check if chat is authorized
+            auth_chat_id = str(config.get("telegram_chat_id") or os.getenv("TELEGRAM_CHAT_ID", "")).strip()
+            if auth_chat_id and str(chat_id) != auth_chat_id:
+                log.warning(f"Ignoring command from unauthorized chat {chat_id}")
+                continue
+
+            handle_telegram_message(config, text, chat_id)
+
+        # Acknowledge processed updates so Telegram clears them from queue
+        if new_offset is not None and new_offset != offset:
+            requests.get(
+                f"https://api.telegram.org/bot{token}/getUpdates",
+                params={"offset": new_offset, "timeout": 0},
+                timeout=5,
+            )
+
+        return new_offset
+    except Exception as e:
+        log.error(f"Failed to process Telegram updates: {e}")
+        return offset
+
 # ---------------------------------------------------------------------------
 # PID management
 # ---------------------------------------------------------------------------
@@ -467,7 +656,7 @@ def _handle_signal(signum, frame):
 
 
 def run_loop(config):
-    """Run the monitor in a continuous loop."""
+    """Run the monitor in a continuous loop, handling both transaction checks and Telegram bot commands."""
     global _running
 
     signal.signal(signal.SIGTERM, _handle_signal)
@@ -478,17 +667,21 @@ def run_loop(config):
 
     log.info(f"Monitor started (PID: {os.getpid()}, interval: {interval}s)")
 
+    last_check_time = 0
+    offset = None
+
     try:
         while _running:
-            try:
-                check_for_new_transactions(config)
-            except Exception as e:
-                log.error(f"Check failed: {e}")
+            now = time.time()
+            if now - last_check_time >= interval:
+                try:
+                    check_for_new_transactions(config)
+                except Exception as e:
+                    log.error(f"Check failed: {e}")
+                last_check_time = time.time()
 
-            for _ in range(interval):
-                if not _running:
-                    break
-                time.sleep(1)
+            # Poll for Telegram commands like /balance
+            offset = process_telegram_updates(config, offset=offset, timeout=2)
     finally:
         remove_pid()
         log.info("Monitor stopped.")
@@ -500,12 +693,18 @@ def run_loop(config):
 def main():
     parser = argparse.ArgumentParser(description="Pluxee Transaction Monitor (Telegram)")
     parser.add_argument("--once", action="store_true", help="Run a single check and exit")
+    parser.add_argument("--poll", action="store_true", help="Process pending Telegram commands (like /balance) and exit")
     parser.add_argument("--test", action="store_true", help="Send a test Telegram notification and exit")
     parser.add_argument("--status", action="store_true", help="Check if the monitor is running")
     parser.add_argument("--stop", action="store_true", help="Stop a running monitor")
     args = parser.parse_args()
 
     config = load_config()
+
+    if args.poll:
+        log.info("Processing pending Telegram commands...")
+        process_telegram_updates(config, timeout=0)
+        return
 
     if args.test:
         log.info("Sending test notification to Telegram...")
@@ -531,7 +730,9 @@ def main():
         return
 
     if args.once:
+        process_telegram_updates(config, timeout=0)
         count, balance = check_for_new_transactions(config)
+        process_telegram_updates(config, timeout=0)
         if balance:
             total = sum(balance.values())
             print(f"Check complete. {count} new transaction(s). Balance: €{total:.2f}")
