@@ -21,27 +21,27 @@ A real-time balance dashboard and automated transaction monitor for **Pluxee Por
 * **🌐 Automated GitHub Pages Dashboard**:
   * Live glassmorphism web dashboard hosted on GitHub Pages: [`https://tiagofdias.github.io/pluxee-dashboard/`](https://tiagofdias.github.io/pluxee-dashboard/).
   * Displays total balance, pass breakdowns, animated ring charts, and 20 recent transactions.
-* **🔒 Cloud-Persistent State via Telegram**:
-  * Backs up transaction fingerprints to a pinned message in Telegram.
-  * Survives stateless GitHub Actions runner cycles with zero lost state.
+* **💾 Automated Repository State Persistence**:
+  * Tracks transaction fingerprints directly in `data/transactions.json` via GitHub Actions commits.
+  * Zero chat clutter: no raw files or pinned messages sent to Telegram.
 
 ---
 
 ## 🔔 Notification Previews
 
 ### Expense (Gasto)
-> **🔴 Pluxee — Gasto**  
+> **🔴 Pluxee — Pagamento Efetuado**  
 > `MCDONALDS SALDANHA`  
-> `-€1,90`  
+> Montante: `-€1,90`  
 >   
 > 💰 **Saldo restante:** `€76,94`
 
 ### Company Monthly Load (Carregamento)
-> **🟢 Pluxee — Carregamento**  
+> **🟢 Pluxee — Carregamento Recebido**  
 > `Carregamento de CAPGEMINI PORTUGAL SA`  
-> `+€211,86`  
+> Montante: `+€211,86`  
 >   
-> 💰 **Saldo restante:** `€273,80`
+> 💰 **Novo saldo:** `€273,80`
 
 ---
 

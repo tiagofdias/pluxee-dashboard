@@ -40,7 +40,6 @@ STATE_FILE = os.path.join(DATA_DIR, "transactions.json")
 OUTAGE_FILE = os.path.join(DATA_DIR, "outage_state.json")
 PID_FILE = os.path.join(DATA_DIR, "monitor.pid")
 LOG_FILE = os.path.join(DATA_DIR, "monitor.log")
-STATE_MARKER = "📊 PLUXEE_MONITOR_STATE"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -95,19 +94,19 @@ def load_config():
 # ---------------------------------------------------------------------------
 
 def load_state():
-    """Load the last-known state from disk, falling back to Telegram."""
+    """Load the last-known state from disk."""
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
+        except (json.JSONDecodeError, IOError) as e:
+            log.warning(f"Could not load state from disk: {e}")
 
-    return _telegram_load_state()
+    return None
 
 
 def save_state(balance, transactions, stale_skip_count=0):
-    """Persist the current state to disk and back up to Telegram."""
+    """Persist the current state to disk and update static site data."""
     os.makedirs(DATA_DIR, exist_ok=True)
     fingerprints = [_tx_fingerprint(tx) for tx in transactions]
     state = {
@@ -120,9 +119,6 @@ def save_state(balance, transactions, stale_skip_count=0):
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
-
-    # Backup to Telegram pinned message (survives stateless runner cycles)
-    _telegram_save_state(balance, fingerprints, len(transactions))
 
     # Export static/data.json for GitHub Pages dashboard
     _export_site_data(balance, transactions)
@@ -152,7 +148,7 @@ def _tx_fingerprint(tx):
 
 
 # ---------------------------------------------------------------------------
-# Telegram state persistence
+# Telegram credentials helper
 # ---------------------------------------------------------------------------
 
 def _telegram_get_credentials():
@@ -162,137 +158,6 @@ def _telegram_get_credentials():
     if token and chat_id:
         return token, chat_id
     return None, None
-
-
-def _telegram_save_state(balance, fingerprints, tx_count):
-    """Save state as a pinned document in Telegram."""
-    token, chat_id = _telegram_get_credentials()
-    if not token or not chat_id:
-        return
-
-    compact = {
-        "lc": datetime.now(timezone.utc).isoformat(),
-        "bal": {
-            "l": balance.get("lunch_pass", 0.0),
-            "e": balance.get("eco_pass", 0.0),
-            "g": balance.get("gift_pass", 0.0),
-            "c": balance.get("conso_pass", 0.0),
-        },
-        "fps": fingerprints,
-        "tc": tx_count,
-    }
-    json_bytes = json.dumps(compact, separators=(',', ':'), ensure_ascii=False).encode("utf-8")
-
-    total = sum(balance.values())
-    sign = "+" if total >= 0 else "-"
-    formatted = f"{abs(total):,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
-    total_str = f"{sign}€{formatted}"
-    caption = f"{STATE_MARKER}\n💰 Saldo: {total_str} | {tx_count} transações"
-
-    try:
-        old_msg_id = None
-        r = requests.get(
-            f"https://api.telegram.org/bot{token}/getChat",
-            params={"chat_id": chat_id},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            pinned = r.json().get("result", {}).get("pinned_message")
-            if pinned:
-                msg_text = pinned.get("caption", "") or pinned.get("text", "")
-                if STATE_MARKER in msg_text:
-                    old_msg_id = pinned["message_id"]
-
-        file_obj = io.BytesIO(json_bytes)
-        send_r = requests.post(
-            f"https://api.telegram.org/bot{token}/sendDocument",
-            data={
-                "chat_id": chat_id,
-                "caption": caption,
-                "disable_notification": "true",
-            },
-            files={"document": ("pluxee_state.json", file_obj, "application/json")},
-            timeout=15,
-        )
-        if send_r.status_code == 200:
-            new_msg_id = send_r.json()["result"]["message_id"]
-            requests.post(
-                f"https://api.telegram.org/bot{token}/pinChatMessage",
-                json={"chat_id": chat_id, "message_id": new_msg_id, "disable_notification": True},
-                timeout=10,
-            )
-            if old_msg_id:
-                requests.post(
-                    f"https://api.telegram.org/bot{token}/deleteMessage",
-                    json={"chat_id": chat_id, "message_id": old_msg_id},
-                    timeout=10,
-                )
-            log.info("State backed up to Telegram (pinned document)")
-    except Exception as e:
-        log.warning(f"Failed to back up state to Telegram: {e}")
-
-
-def _telegram_load_state():
-    """Load state from the Telegram pinned message."""
-    token, chat_id = _telegram_get_credentials()
-    if not token or not chat_id:
-        return None
-
-    try:
-        r = requests.get(
-            f"https://api.telegram.org/bot{token}/getChat",
-            params={"chat_id": chat_id},
-            timeout=10,
-        )
-        if r.status_code != 200:
-            return None
-
-        pinned = r.json().get("result", {}).get("pinned_message")
-        if not pinned:
-            return None
-
-        caption = pinned.get("caption", "")
-        if STATE_MARKER in caption and pinned.get("document"):
-            file_id = pinned["document"]["file_id"]
-            file_r = requests.get(
-                f"https://api.telegram.org/bot{token}/getFile",
-                params={"file_id": file_id},
-                timeout=10,
-            )
-            if file_r.status_code != 200:
-                return None
-            file_path = file_r.json()["result"]["file_path"]
-            dl_r = requests.get(
-                f"https://api.telegram.org/file/bot{token}/{file_path}",
-                timeout=10,
-            )
-            if dl_r.status_code != 200:
-                return None
-            compact = dl_r.json()
-        else:
-            text = pinned.get("text", "")
-            if STATE_MARKER not in text:
-                return None
-            json_str = text[text.index(STATE_MARKER) + len(STATE_MARKER):].strip()
-            compact = json.loads(json_str)
-
-        state = {
-            "last_check": compact.get("lc"),
-            "balance": {
-                "lunch_pass": compact.get("bal", {}).get("l", 0.0),
-                "eco_pass": compact.get("bal", {}).get("e", 0.0),
-                "gift_pass": compact.get("bal", {}).get("g", 0.0),
-                "conso_pass": compact.get("bal", {}).get("c", 0.0),
-            },
-            "transactions": [],
-            "fingerprints": compact.get("fps", []),
-            "tx_count": compact.get("tc", 0),
-        }
-        log.info(f"State restored from Telegram (tx_count={state['tx_count']})")
-        return state
-    except Exception as e:
-        log.warning(f"Failed to load state from Telegram: {e}")
-        return None
 
 # ---------------------------------------------------------------------------
 # Outage detection
@@ -395,18 +260,22 @@ def send_notification(title, message):
 
 
 def notify_transaction(tx, balance_after):
-    """Send a Telegram notification for a single transaction."""
+    """Send a Telegram notification for a single transaction (payment or recharge)."""
     is_credit = tx["amount"] > 0
-    emoji = "🟢" if is_credit else "🔴"
-    title = f"{emoji} Pluxee — {'Carregamento' if is_credit else 'Gasto'}"
+    if is_credit:
+        title = "🟢 Pluxee — Carregamento Recebido"
+        balance_label = "Novo saldo"
+    else:
+        title = "🔴 Pluxee — Pagamento Efetuado"
+        balance_label = "Saldo restante"
 
     amount_str = fmt_eur(tx["amount"])
     balance_str = fmt_eur(balance_after)
 
     message = (
-        f"{tx['description']}\n"
-        f"{amount_str}\n\n"
-        f"💰 Saldo restante: {balance_str}"
+        f"<b>{tx['description']}</b>\n"
+        f"Montante: <b>{amount_str}</b>\n\n"
+        f"💰 {balance_label}: <b>{balance_str}</b>"
     )
 
     send_notification(title, message)
@@ -559,20 +428,30 @@ def check_for_new_transactions(config):
         log.info("No new transactions found.")
 
     # Check for balance changes without transactions
+    balance_changed = False
     if abs(total - prev_total) > 0.01 and not new_txs:
         if total == 0 and prev_total > 1.0:
             log.warning("Balance dropped to €0.00 with no new transactions — skipping glitch.")
             return 0, None
 
         diff = total - prev_total
-        direction = "subiu" if diff > 0 else "desceu"
-        send_notification(
-            title=f"Pluxee — Saldo {direction}",
-            message=f"O saldo alterou {fmt_eur(diff)}\n\n💰 Saldo atual: {fmt_eur(total)}",
-        )
+        if diff > 0:
+            title = "🟢 Pluxee — Carregamento Detetado"
+            msg = f"O seu cartão foi carregado com <b>{fmt_eur(diff)}</b>!\n\n💰 Novo saldo: <b>{fmt_eur(total)}</b>"
+        else:
+            title = "🔴 Pluxee — Saldo Atualizado"
+            msg = f"O saldo diminuiu <b>{fmt_eur(abs(diff))}</b>.\n\n💰 Saldo restante: <b>{fmt_eur(total)}</b>"
 
-    # Save updated state
-    save_state(current_balance, current_txs)
+        send_notification(title=title, message=msg)
+        balance_changed = True
+
+    # Save updated state ONLY if there are new transactions or balance changed
+    if new_txs or balance_changed:
+        log.info("State changed — updating persistent files.")
+        save_state(current_balance, current_txs)
+    else:
+        log.info("State unchanged — skipping file update to prevent redundant git commits.")
+
     return len(new_txs), current_balance
 
 # ---------------------------------------------------------------------------

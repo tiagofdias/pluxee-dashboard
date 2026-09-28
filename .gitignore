@@ -13,8 +13,9 @@ __pycache__/
 # Debug files
 debug/
 
-# Runtime data (state is ephemeral on Render, stored in /tmp or env)
-data/
+# Runtime data (state persisted in transactions.json, logs/pids ignored)
+data/*
+!data/transactions.json
 
 # OS
 .DS_Store
