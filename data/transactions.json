@@ -1,12 +1,22 @@
 {
-  "last_check": "2026-09-28T17:03:16.077059+00:00",
+  "last_check": "2026-09-30T02:27:41.273118+00:00",
   "balance": {
-    "lunch_pass": 273.8,
+    "lunch_pass": 268.81,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "30/09/2026",
+      "description": "Glovo GLOVO PRIME",
+      "amount": -4.99,
+      "balance": 273.8,
+      "currency": "EUR",
+      "effective_date": "30/09/2026",
+      "raw_description": "Compra  Glovo GLOVO PRIME,LISBOA,PRT",
+      "is_rejected": false
+    },
     {
       "date": "24/09/2026",
       "description": "Carregamento de CAPGEMINI PORTUGAL SA",
@@ -196,19 +206,10 @@
       "effective_date": "31/07/2026",
       "raw_description": "Compra GLOVO30JUL LIZMH14V9,none,PRT",
       "is_rejected": false
-    },
-    {
-      "date": "29/07/2026",
-      "description": "A R BICHO   MARQUES",
-      "amount": -14.0,
-      "balance": 210.8,
-      "currency": "EUR",
-      "effective_date": "30/07/2026",
-      "raw_description": "Compra A R BICHO   MARQUES,30-32 - LISBO,P",
-      "is_rejected": false
     }
   ],
   "fingerprints": [
+    "84df0461951b243715253f92f76f9bbc",
     "f65a92c79cec90c69cb720f579807413",
     "284269a01a0cbba810f04009641da2a4",
     "e43c30714cbc958a836cda8835178c30",
@@ -227,8 +228,7 @@
     "5ecc92b689d593b8916e82f9894546f5",
     "a3b2702b1efe1b6b95f87616e122d9cc",
     "1e124c20c199bf93eb7a2ba0a5b481ea",
-    "747b665bf2d57a3f3a8046d4a7ca3bc0",
-    "044db27c766d475ba2300ff099054051"
+    "747b665bf2d57a3f3a8046d4a7ca3bc0"
   ],
   "tx_count": 20,
   "stale_skip_count": 0
