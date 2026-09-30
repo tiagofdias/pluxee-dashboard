@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-09-30T02:27:41.273601+00:00",
+  "updated_at": "2026-09-30T20:44:54.574569+00:00",
   "balance": {
-    "lunch_pass": 268.81,
+    "lunch_pass": 217.7,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
@@ -9,12 +9,22 @@
   "transactions": [
     {
       "date": "30/09/2026",
-      "description": "Glovo GLOVO PRIME",
-      "amount": -4.99,
-      "balance": 273.8,
+      "description": "Glovo 30SEP LI11RMQKE",
+      "amount": -52.24,
+      "balance": 268.81,
       "currency": "EUR",
       "effective_date": "30/09/2026",
-      "raw_description": "Compra  Glovo GLOVO PRIME,LISBOA,PRT",
+      "raw_description": "Compra  Glovo 30SEP LI11RMQKE,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "30/09/2026",
+      "description": "Glovo GLOVO PRIME",
+      "amount": -4.99,
+      "balance": 268.81,
+      "currency": "EUR",
+      "effective_date": "30/09/2026",
+      "raw_description": "Compra Glovo GLOVO PRIME,LISBOA,PRT",
       "is_rejected": false
     },
     {
@@ -195,16 +205,6 @@
       "currency": "EUR",
       "effective_date": "01/08/2026",
       "raw_description": "Compra Glovo GLOVO PRIME,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "30/07/2026",
-      "description": "GLOVO30JUL LIZMH14V9",
-      "amount": -19.65,
-      "balance": 191.15,
-      "currency": "EUR",
-      "effective_date": "31/07/2026",
-      "raw_description": "Compra GLOVO30JUL LIZMH14V9,none,PRT",
       "is_rejected": false
     }
   ]
