@@ -1,20 +1,30 @@
 {
-  "updated_at": "2026-10-01T13:26:05.521005+00:00",
+  "updated_at": "2026-10-02T15:41:55.252165+00:00",
   "balance": {
-    "lunch_pass": 208.0,
+    "lunch_pass": 199.52,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "02/10/2026",
+      "description": "Glovo 02OCT LIJF46DD1",
+      "amount": -8.48,
+      "balance": 208.0,
+      "currency": "EUR",
+      "effective_date": "02/10/2026",
+      "raw_description": "Compra  Glovo 02OCT LIJF46DD1,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "01/10/2026",
       "description": "A R BICHO   MARQUES",
       "amount": -9.7,
-      "balance": 217.7,
+      "balance": 208.0,
       "currency": "EUR",
-      "effective_date": "01/10/2026",
-      "raw_description": "Compra  A R BICHO   MARQUES,30-32 - LISBO,",
+      "effective_date": "02/10/2026",
+      "raw_description": "Compra A R BICHO   MARQUES,30-32 - LISBO,P",
       "is_rejected": false
     },
     {
@@ -195,16 +205,6 @@
       "currency": "EUR",
       "effective_date": "03/08/2026",
       "raw_description": "Compra Glovo 02AUG LI6LKNZ31,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "31/07/2026",
-      "description": "Glovo 31JUL LI3AHLPNE",
-      "amount": -10.1,
-      "balance": 176.06,
-      "currency": "EUR",
-      "effective_date": "01/08/2026",
-      "raw_description": "Compra Glovo 31JUL LI3AHLPNE,LISBOA,PRT",
       "is_rejected": false
     }
   ]
