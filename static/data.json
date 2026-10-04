@@ -1,20 +1,30 @@
 {
-  "updated_at": "2026-10-02T15:41:55.252165+00:00",
+  "updated_at": "2026-10-04T23:02:08.969002+00:00",
   "balance": {
-    "lunch_pass": 199.52,
+    "lunch_pass": 149.13,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "04/10/2026",
+      "description": "Glovo 04OCT OPAR82MBZ",
+      "amount": -50.39,
+      "balance": 199.52,
+      "currency": "EUR",
+      "effective_date": "04/10/2026",
+      "raw_description": "Compra  Glovo 04OCT OPAR82MBZ,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "02/10/2026",
       "description": "Glovo 02OCT LIJF46DD1",
       "amount": -8.48,
-      "balance": 208.0,
+      "balance": 199.52,
       "currency": "EUR",
-      "effective_date": "02/10/2026",
-      "raw_description": "Compra  Glovo 02OCT LIJF46DD1,LISBOA,PRT",
+      "effective_date": "03/10/2026",
+      "raw_description": "Compra Glovo 02OCT LIJF46DD1,LISBOA,PRT",
       "is_rejected": false
     },
     {
@@ -195,16 +205,6 @@
       "currency": "EUR",
       "effective_date": "04/08/2026",
       "raw_description": "Compra Glovo 03AUG LIDJAZG5J,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "02/08/2026",
-      "description": "Glovo 02AUG LI6LKNZ31",
-      "amount": -9.19,
-      "balance": 166.87,
-      "currency": "EUR",
-      "effective_date": "03/08/2026",
-      "raw_description": "Compra Glovo 02AUG LI6LKNZ31,LISBOA,PRT",
       "is_rejected": false
     }
   ]
