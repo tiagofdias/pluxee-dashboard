@@ -1,20 +1,30 @@
 {
-  "updated_at": "2026-10-04T23:02:08.969002+00:00",
+  "updated_at": "2026-10-05T18:18:11.497566+00:00",
   "balance": {
-    "lunch_pass": 149.13,
+    "lunch_pass": 131.23,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "05/10/2026",
+      "description": "TERTULIAS JASMIM",
+      "amount": -17.9,
+      "balance": 149.13,
+      "currency": "EUR",
+      "effective_date": "05/10/2026",
+      "raw_description": "Compra  TERTULIAS JASMIM,GMR,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "04/10/2026",
       "description": "Glovo 04OCT OPAR82MBZ",
       "amount": -50.39,
-      "balance": 199.52,
+      "balance": 149.13,
       "currency": "EUR",
-      "effective_date": "04/10/2026",
-      "raw_description": "Compra  Glovo 04OCT OPAR82MBZ,LISBOA,PRT",
+      "effective_date": "05/10/2026",
+      "raw_description": "Compra Glovo 04OCT OPAR82MBZ,LISBOA,PRT",
       "is_rejected": false
     },
     {
@@ -195,16 +205,6 @@
       "currency": "EUR",
       "effective_date": "10/08/2026",
       "raw_description": "Compra Glovo 09AUG LIX6ARZUQ,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "03/08/2026",
-      "description": "Glovo 03AUG LIDJAZG5J",
-      "amount": -47.31,
-      "balance": 119.56,
-      "currency": "EUR",
-      "effective_date": "04/08/2026",
-      "raw_description": "Compra Glovo 03AUG LIDJAZG5J,LISBOA,PRT",
       "is_rejected": false
     }
   ]
