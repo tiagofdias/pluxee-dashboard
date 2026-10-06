@@ -1,20 +1,30 @@
 {
-  "updated_at": "2026-10-05T18:18:11.497566+00:00",
+  "updated_at": "2026-10-06T13:33:05.831288+00:00",
   "balance": {
-    "lunch_pass": 131.23,
+    "lunch_pass": 121.63,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "06/10/2026",
+      "description": "LEITARIA QUINTA PACO",
+      "amount": -9.6,
+      "balance": 131.23,
+      "currency": "EUR",
+      "effective_date": "06/10/2026",
+      "raw_description": "Compra  LEITARIA QUINTA PACO,BRAGA,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "05/10/2026",
       "description": "TERTULIAS JASMIM",
       "amount": -17.9,
-      "balance": 149.13,
+      "balance": 131.23,
       "currency": "EUR",
-      "effective_date": "05/10/2026",
-      "raw_description": "Compra  TERTULIAS JASMIM,GMR,PRT",
+      "effective_date": "06/10/2026",
+      "raw_description": "Compra TERTULIAS JASMIM,GUIMARAES,PRT",
       "is_rejected": false
     },
     {
@@ -195,16 +205,6 @@
       "currency": "EUR",
       "effective_date": "13/08/2026",
       "raw_description": "Compra CONTINENTE,Portugal,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "09/08/2026",
-      "description": "Glovo 09AUG LIX6ARZUQ",
-      "amount": -9.19,
-      "balance": 110.37,
-      "currency": "EUR",
-      "effective_date": "10/08/2026",
-      "raw_description": "Compra Glovo 09AUG LIX6ARZUQ,LISBOA,PRT",
       "is_rejected": false
     }
   ]
