@@ -1,20 +1,30 @@
 {
-  "last_check": "2026-10-06T13:33:05.830801+00:00",
+  "last_check": "2026-10-07T21:12:25.223694+00:00",
   "balance": {
-    "lunch_pass": 121.63,
+    "lunch_pass": 107.64,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "07/10/2026",
+      "description": "Glovo 07OCT BRLKDGYG2",
+      "amount": -13.99,
+      "balance": 121.63,
+      "currency": "EUR",
+      "effective_date": "07/10/2026",
+      "raw_description": "Compra  Glovo 07OCT BRLKDGYG2,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "06/10/2026",
       "description": "LEITARIA QUINTA PACO",
       "amount": -9.6,
-      "balance": 131.23,
+      "balance": 121.63,
       "currency": "EUR",
-      "effective_date": "06/10/2026",
-      "raw_description": "Compra  LEITARIA QUINTA PACO,BRAGA,PRT",
+      "effective_date": "07/10/2026",
+      "raw_description": "Compra LEITARIA QUINTA PACO,BRAGA,PRT",
       "is_rejected": false
     },
     {
@@ -196,19 +206,10 @@
       "effective_date": null,
       "raw_description": "Carregamento de CAPGEMINI PORTUGAL SA",
       "is_rejected": false
-    },
-    {
-      "date": "12/08/2026",
-      "description": "CONTINENTE",
-      "amount": -110.0,
-      "balance": 0.37,
-      "currency": "EUR",
-      "effective_date": "13/08/2026",
-      "raw_description": "Compra CONTINENTE,Portugal,PRT",
-      "is_rejected": false
     }
   ],
   "fingerprints": [
+    "b1d9f11a79d692209bbdf810d421b835",
     "6e9216665a5013d034c533741cca86ef",
     "c8e2449aebbd00ccb8bddc89082f09fa",
     "53ed7e56c5e322530315d4b6e7f907b7",
@@ -227,8 +228,7 @@
     "820fd5fc45d612e01255cbc21ac5efca",
     "2ed8090fc16d3a4ce129eccdfb2ac6d4",
     "b6270f0867360d3c001f6d79a9bc4ea5",
-    "98604951d7d71fc84a7da8d87da113bb",
-    "173311ebb09a40c73095a215bc163b3d"
+    "98604951d7d71fc84a7da8d87da113bb"
   ],
   "tx_count": 20,
   "stale_skip_count": 0
