@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-10-07T21:12:25.224077+00:00",
+  "updated_at": "2026-10-08T14:40:48.680995+00:00",
   "balance": {
-    "lunch_pass": 107.64,
+    "lunch_pass": 107.33,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
@@ -10,11 +10,11 @@
     {
       "date": "07/10/2026",
       "description": "Glovo 07OCT BRLKDGYG2",
-      "amount": -13.99,
-      "balance": 121.63,
+      "amount": -14.3,
+      "balance": 107.33,
       "currency": "EUR",
-      "effective_date": "07/10/2026",
-      "raw_description": "Compra  Glovo 07OCT BRLKDGYG2,LISBOA,PRT",
+      "effective_date": "08/10/2026",
+      "raw_description": "Compra Glovo 07OCT BRLKDGYG2,LISBOA,PRT",
       "is_rejected": false
     },
     {
