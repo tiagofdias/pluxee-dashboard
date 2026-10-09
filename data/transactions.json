@@ -1,12 +1,22 @@
 {
-  "last_check": "2026-10-09T13:49:53.530194+00:00",
+  "last_check": "2026-10-09T23:26:21.865129+00:00",
   "balance": {
-    "lunch_pass": 105.51,
+    "lunch_pass": 77.44,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "09/10/2026",
+      "description": "Glovo 09OCT BRKYZ62ZY",
+      "amount": -28.07,
+      "balance": 107.33,
+      "currency": "EUR",
+      "effective_date": "09/10/2026",
+      "raw_description": "Compra  Glovo 09OCT BRKYZ62ZY,LISBOA,PRT",
+      "is_rejected": false
+    },
     {
       "date": "09/10/2026",
       "description": "PINGO DOCE BRAGA 2",
@@ -196,19 +206,10 @@
       "effective_date": "01/09/2026",
       "raw_description": "Compra Glovo 31AUG LID1UUF2S,LISBOA,PRT",
       "is_rejected": false
-    },
-    {
-      "date": "31/08/2026",
-      "description": "Glovo GLOVO PRIME",
-      "amount": -4.99,
-      "balance": 197.61,
-      "currency": "EUR",
-      "effective_date": "31/08/2026",
-      "raw_description": "Compra Glovo GLOVO PRIME,LISBOA,PRT",
-      "is_rejected": false
     }
   ],
   "fingerprints": [
+    "59f0c53257f54d3800f366afffeb8f91",
     "d883d61332eb8d00756d21598c204a70",
     "2163d05c94fad34aebb50e68ac9bf683",
     "6e9216665a5013d034c533741cca86ef",
@@ -227,8 +228,7 @@
     "20f5d500da59fcbe7583225f88f89e26",
     "2b9ef657ae9a61ee9de52e9f337e2e07",
     "820fd5fc45d612e01255cbc21ac5efca",
-    "2ed8090fc16d3a4ce129eccdfb2ac6d4",
-    "b6270f0867360d3c001f6d79a9bc4ea5"
+    "2ed8090fc16d3a4ce129eccdfb2ac6d4"
   ],
   "tx_count": 20,
   "stale_skip_count": 0
