@@ -1,12 +1,22 @@
 {
-  "last_check": "2026-10-08T14:40:48.680495+00:00",
+  "last_check": "2026-10-09T13:49:53.530194+00:00",
   "balance": {
-    "lunch_pass": 107.33,
+    "lunch_pass": 105.51,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "09/10/2026",
+      "description": "PINGO DOCE BRAGA 2",
+      "amount": -1.82,
+      "balance": 107.33,
+      "currency": "EUR",
+      "effective_date": "09/10/2026",
+      "raw_description": "Compra  PINGO DOCE BRAGA 2,BRAGA,PRT",
+      "is_rejected": false
+    },
     {
       "date": "07/10/2026",
       "description": "Glovo 07OCT BRLKDGYG2",
@@ -196,19 +206,10 @@
       "effective_date": "31/08/2026",
       "raw_description": "Compra Glovo GLOVO PRIME,LISBOA,PRT",
       "is_rejected": false
-    },
-    {
-      "date": "26/08/2026",
-      "description": "Carregamento de CAPGEMINI PORTUGAL SA",
-      "amount": 202.23,
-      "balance": 202.6,
-      "currency": "EUR",
-      "effective_date": null,
-      "raw_description": "Carregamento de CAPGEMINI PORTUGAL SA",
-      "is_rejected": false
     }
   ],
   "fingerprints": [
+    "d883d61332eb8d00756d21598c204a70",
     "2163d05c94fad34aebb50e68ac9bf683",
     "6e9216665a5013d034c533741cca86ef",
     "c8e2449aebbd00ccb8bddc89082f09fa",
@@ -227,8 +228,7 @@
     "2b9ef657ae9a61ee9de52e9f337e2e07",
     "820fd5fc45d612e01255cbc21ac5efca",
     "2ed8090fc16d3a4ce129eccdfb2ac6d4",
-    "b6270f0867360d3c001f6d79a9bc4ea5",
-    "98604951d7d71fc84a7da8d87da113bb"
+    "b6270f0867360d3c001f6d79a9bc4ea5"
   ],
   "tx_count": 20,
   "stale_skip_count": 0
