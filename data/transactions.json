@@ -1,30 +1,40 @@
 {
-  "last_check": "2026-10-09T23:26:21.865129+00:00",
+  "last_check": "2026-10-10T15:25:31.545927+00:00",
   "balance": {
-    "lunch_pass": 77.44,
+    "lunch_pass": 43.64,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "10/10/2026",
+      "description": "MBH BRAGA",
+      "amount": -33.8,
+      "balance": 77.44,
+      "currency": "EUR",
+      "effective_date": "10/10/2026",
+      "raw_description": "Compra  MBH BRAGA,4700-424 BRAG,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "09/10/2026",
       "description": "Glovo 09OCT BRKYZ62ZY",
       "amount": -28.07,
-      "balance": 107.33,
+      "balance": 77.44,
       "currency": "EUR",
-      "effective_date": "09/10/2026",
-      "raw_description": "Compra  Glovo 09OCT BRKYZ62ZY,LISBOA,PRT",
+      "effective_date": "10/10/2026",
+      "raw_description": "Compra Glovo 09OCT BRKYZ62ZY,LISBOA,PRT",
       "is_rejected": false
     },
     {
       "date": "09/10/2026",
       "description": "PINGO DOCE BRAGA 2",
       "amount": -1.82,
-      "balance": 107.33,
+      "balance": 105.51,
       "currency": "EUR",
-      "effective_date": "09/10/2026",
-      "raw_description": "Compra  PINGO DOCE BRAGA 2,BRAGA,PRT",
+      "effective_date": "10/10/2026",
+      "raw_description": "Compra PINGO DOCE BRAGA 2,BRAGA,PRT",
       "is_rejected": false
     },
     {
@@ -196,19 +206,10 @@
       "effective_date": "02/09/2026",
       "raw_description": "Compra Glovo 01SEP LI1W2JVDY,LISBOA,PRT",
       "is_rejected": false
-    },
-    {
-      "date": "31/08/2026",
-      "description": "Glovo 31AUG LID1UUF2S",
-      "amount": -16.11,
-      "balance": 181.5,
-      "currency": "EUR",
-      "effective_date": "01/09/2026",
-      "raw_description": "Compra Glovo 31AUG LID1UUF2S,LISBOA,PRT",
-      "is_rejected": false
     }
   ],
   "fingerprints": [
+    "caa8e1628bd6edc43d829f3e38441fc3",
     "59f0c53257f54d3800f366afffeb8f91",
     "d883d61332eb8d00756d21598c204a70",
     "2163d05c94fad34aebb50e68ac9bf683",
@@ -227,8 +228,7 @@
     "8b3dea9be17466445f58315ddf016ddc",
     "20f5d500da59fcbe7583225f88f89e26",
     "2b9ef657ae9a61ee9de52e9f337e2e07",
-    "820fd5fc45d612e01255cbc21ac5efca",
-    "2ed8090fc16d3a4ce129eccdfb2ac6d4"
+    "820fd5fc45d612e01255cbc21ac5efca"
   ],
   "tx_count": 20,
   "stale_skip_count": 0

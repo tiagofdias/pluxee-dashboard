@@ -1,30 +1,40 @@
 {
-  "updated_at": "2026-10-09T23:26:21.865655+00:00",
+  "updated_at": "2026-10-10T15:25:31.624141+00:00",
   "balance": {
-    "lunch_pass": 77.44,
+    "lunch_pass": 43.64,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
     {
+      "date": "10/10/2026",
+      "description": "MBH BRAGA",
+      "amount": -33.8,
+      "balance": 77.44,
+      "currency": "EUR",
+      "effective_date": "10/10/2026",
+      "raw_description": "Compra  MBH BRAGA,4700-424 BRAG,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "09/10/2026",
       "description": "Glovo 09OCT BRKYZ62ZY",
       "amount": -28.07,
-      "balance": 107.33,
+      "balance": 77.44,
       "currency": "EUR",
-      "effective_date": "09/10/2026",
-      "raw_description": "Compra  Glovo 09OCT BRKYZ62ZY,LISBOA,PRT",
+      "effective_date": "10/10/2026",
+      "raw_description": "Compra Glovo 09OCT BRKYZ62ZY,LISBOA,PRT",
       "is_rejected": false
     },
     {
       "date": "09/10/2026",
       "description": "PINGO DOCE BRAGA 2",
       "amount": -1.82,
-      "balance": 107.33,
+      "balance": 105.51,
       "currency": "EUR",
-      "effective_date": "09/10/2026",
-      "raw_description": "Compra  PINGO DOCE BRAGA 2,BRAGA,PRT",
+      "effective_date": "10/10/2026",
+      "raw_description": "Compra PINGO DOCE BRAGA 2,BRAGA,PRT",
       "is_rejected": false
     },
     {
@@ -195,16 +205,6 @@
       "currency": "EUR",
       "effective_date": "02/09/2026",
       "raw_description": "Compra Glovo 01SEP LI1W2JVDY,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "31/08/2026",
-      "description": "Glovo 31AUG LID1UUF2S",
-      "amount": -16.11,
-      "balance": 181.5,
-      "currency": "EUR",
-      "effective_date": "01/09/2026",
-      "raw_description": "Compra Glovo 31AUG LID1UUF2S,LISBOA,PRT",
       "is_rejected": false
     }
   ]
