@@ -307,6 +307,13 @@
       intelLastReloadDate.textContent = latestReload.date + " (" + latestReload.days + " dias)";
     }
 
+    // Update Benchmark Annual Estimate
+    var annualTotalEl = $("b-annual-total");
+    if (annualTotalEl) {
+      var annualEstimate = Math.round(230 * activeDailyRate);
+      annualTotalEl.textContent = "~" + fmt(annualEstimate) + " / ano";
+    }
+
     // Render Reload Chips
     renderReloadChips(reloads);
 

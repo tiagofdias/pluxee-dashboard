@@ -635,7 +635,234 @@ body {
 }
 
 /* ================================================================
-   2. CHARTS PANEL (CANVAS WRAPPERS)
+   BENCHMARK PANEL & MARKET COMPETITIVENESS
+   ================================================================ */
+.icon-benchmark {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.pill-tier {
+  font-family: var(--font);
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 4px 12px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+
+.benchmark-body {
+  padding: 20px 24px;
+}
+
+/* Market Scale Bar */
+.market-scale-wrap {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.market-scale-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scale-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scale-verdict {
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.scale-verdict strong {
+  color: var(--success);
+}
+
+.market-scale-bar-track {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  position: relative;
+}
+
+.scale-segment {
+  border-radius: var(--r-xs);
+  padding: 10px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: transform 0.2s var(--ease);
+}
+
+.scale-segment:hover {
+  transform: translateY(-2px);
+}
+
+.seg-min {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.seg-avg {
+  background: rgba(112, 121, 255, 0.06);
+  border: 1px solid rgba(112, 121, 255, 0.15);
+}
+
+.seg-big4 {
+  background: rgba(176, 122, 255, 0.08);
+  border: 1px solid rgba(176, 122, 255, 0.2);
+}
+
+.seg-capgemini {
+  background: linear-gradient(135deg, rgba(46, 213, 115, 0.15), rgba(245, 158, 11, 0.15));
+  border: 1.5px solid var(--success);
+  box-shadow: 0 0 16px rgba(46, 213, 115, 0.2);
+}
+
+.seg-val {
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.seg-val-cap {
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 800;
+  color: #2ed573;
+}
+
+.seg-label {
+  font-size: 0.65rem;
+  color: var(--text-3);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.seg-label-cap {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #2ed573;
+  line-height: 1.2;
+}
+
+/* Benchmark Stats Grid */
+.benchmark-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.b-stat-card {
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.b-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-hover);
+}
+
+.b-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.b-stat-title {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.b-badge {
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 99px;
+}
+
+.badge-pos  { background: rgba(46, 213, 115, 0.12); color: var(--success); }
+.badge-tax  { background: rgba(112, 121, 255, 0.12); color: var(--indigo); }
+.badge-comp { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+
+.b-stat-number {
+  font-family: var(--font);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.b-stat-desc {
+  font-size: 0.7rem;
+  color: var(--text-3);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+/* Tax Insight Box */
+.tax-insight-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(112, 121, 255, 0.06);
+  border: 1px solid rgba(112, 121, 255, 0.18);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+}
+
+.tax-insight-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--indigo);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.tax-insight-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tax-insight-text {
+  font-size: 0.74rem;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.tax-insight-text strong {
+  color: #ffffff;
+}
+
+/* ================================================================
+   3. CHARTS PANEL (CANVAS WRAPPERS)
    ================================================================ */
 .chart-wrapper {
   padding: 20px 24px;
