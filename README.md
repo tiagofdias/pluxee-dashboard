@@ -72,17 +72,20 @@ Using a network proxy (e.g., [HTTP Toolkit](https://httptoolkit.com/), Charles, 
 3. Search for **`@userinfobot`** in Telegram to obtain your personal numerical **`TELEGRAM_CHAT_ID`**.
 4. Send `/start` to your newly created bot so it can message you.
 
-### 3. Setup GitHub Actions & Pages
-1. Go to your repository **Settings** > **Secrets and variables** > **Actions**.
-2. Add the following **Repository Secrets**:
-   * `PLUXEE_API_CLAIM`
-   * `PLUXEE_CARD_ID`
-   * `PLUXEE_BENEFIT_ID`
-   * `TELEGRAM_TOKEN`
-   * `TELEGRAM_CHAT_ID`
-3. Go to **Settings** > **Pages**:
-   * Set **Source** to **GitHub Actions**.
-4. Go to the **Actions** tab and trigger **Pluxee Monitor & GitHub Pages** manually to run the first check and deploy the dashboard!
+### 3. Setup Render (24/7 Real-Time Monitoring)
+1. Fork or push this repository to GitHub.
+2. In [Render Dashboard](https://dashboard.render.com/), click **New** > **Blueprint** and connect your repo (or create a **Web Service** using `render.yaml`).
+3. Set your environment variables in Render:
+   * `PLUXEE_API_CLAIM`: Your intercepted ApiClaim token.
+   * `TELEGRAM_TOKEN`: Your Telegram bot token.
+   * `TELEGRAM_CHAT_ID`: Your Telegram numeric chat ID.
+   * `POLL_INTERVAL_SECONDS`: `60` (or `30` for ultra fast alerts).
+4. Deploy! The service uses `python run.py` to supervise both the 24/7 monitor and the web server in the same container, with automatic self-keepalive pings so it stays alive 24/7.
+
+### 4. Setup GitHub Actions & Pages (Alternative / Backup)
+1. Go to repository **Settings** > **Secrets and variables** > **Actions**.
+2. Add secrets: `PLUXEE_API_CLAIM`, `PLUXEE_CARD_ID`, `PLUXEE_BENEFIT_ID`, `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`.
+3. Enable Pages under **Settings** > **Pages** (Source: GitHub Actions).
 
 ---
 

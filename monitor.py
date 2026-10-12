@@ -74,7 +74,7 @@ def load_config():
     benefit_id = os.getenv("PLUXEE_BENEFIT_ID", "").strip()
     telegram_token = os.getenv("TELEGRAM_TOKEN", "").strip()
     telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-    interval = int(os.getenv("POLL_INTERVAL_SECONDS", "300"))
+    interval = int(os.getenv("POLL_INTERVAL_SECONDS", "60"))
 
     if not api_claim or not card_id or not benefit_id:
         log.error("PLUXEE_API_CLAIM, PLUXEE_CARD_ID, and PLUXEE_BENEFIT_ID must be configured")
@@ -406,16 +406,17 @@ def calculate_financial_stats(transactions):
     }
 
 
-def format_balance_response(balance, transactions=None):
+def format_balance_response(balance, transactions=None, is_cached=False):
     """Format the clean financial summary requested for Telegram (/balance)."""
     total = sum(balance.values()) if isinstance(balance, dict) else float(balance)
     total_str = fmt_eur(total)
 
     stats = calculate_financial_stats(transactions or [])
+    balance_title = "💰 <b>Saldo Atual (último sincronizado):</b>" if is_cached else "💰 <b>Saldo Atual:</b>"
 
     lines = [
         "💳 <b>Pluxee — Saldo & Estatísticas</b>\n",
-        f"💰 <b>Saldo Atual:</b> <b>{total_str}</b>\n",
+        f"{balance_title} <b>{total_str}</b>\n",
         "📉 <b>Gastos:</b>",
         f"• <b>Esta semana:</b> {fmt_eur(stats['this_week'])}",
         f"• <b>Mês passado ({stats['last_month_name']}):</b> {fmt_eur(stats['last_month'])}",
@@ -427,6 +428,9 @@ def format_balance_response(balance, transactions=None):
 
     if stats["last_deposit_date"]:
         lines.append(f"• <b>Último remanescente:</b> {fmt_eur(stats['last_savings'])} <i>(antes de {stats['last_deposit_date']})</i>")
+
+    if is_cached:
+        lines.append("\n<i>⚠️ Nota: Servidores da Pluxee em manutenção temporária. A apresentar dados sincronizados.</i>")
 
     return "\n".join(lines)
 
@@ -486,7 +490,8 @@ def handle_balance_command(config, chat_id):
             all_txs.append(t)
             seen_fps.add(fp)
 
-    text = format_balance_response(balance, all_txs)
+    is_cached = (transactions is None)
+    text = format_balance_response(balance, all_txs, is_cached=is_cached)
     send_telegram_direct(config, chat_id, text)
 
 
@@ -609,24 +614,33 @@ def is_monitor_running():
 # Core check logic
 # ---------------------------------------------------------------------------
 
+_last_auth_notif_time = 0
+
+
 def check_for_new_transactions(config):
     """Check Pluxee for new transactions via Mobile API and notify on Telegram."""
+    global _last_auth_notif_time
     log.info("Checking for new transactions via Pluxee Mobile API...")
 
     try:
         result = fetch_all(config["api_claim"], config["card_id"], config["benefit_id"], num=20)
+        _last_auth_notif_time = 0  # Reset cooldown on successful fetch
     except PluxeeAuthError as e:
         log.error(f"Authentication error: {e}")
-        send_notification(
-            title="⚠️ Pluxee — Sessão Expirada",
-            message=(
-                "A sessão da API móvel do Pluxee expirou (401).\n"
-                "Por favor, atualize o PLUXEE_API_CLAIM nas definições."
-            ),
-        )
+        now = time.time()
+        # Cooldown: send auth notification at most once every 12 hours to prevent spamming
+        if now - _last_auth_notif_time > 43200:
+            _last_auth_notif_time = now
+            send_notification(
+                title="⚠️ Pluxee — Sessão Expirada",
+                message=(
+                    "A sessão da API móvel do Pluxee expirou (401).\n"
+                    "Por favor, atualize o PLUXEE_API_CLAIM nas definições."
+                ),
+            )
         return 0, None
     except PluxeeConnectionError as e:
-        log.error(f"Connection error: {e}")
+        log.warning(f"Connection error / server outage: {e}")
         return 0, None
     except Exception as e:
         log.error(f"Unexpected API error: {e}")
@@ -688,14 +702,21 @@ def check_for_new_transactions(config):
     new_txs = [tx for tx in current_txs if _tx_fingerprint(tx) in new_fingerprints]
 
     prev_balance = prev_state.get("balance", {})
-    prev_total = sum(prev_balance.values())
-
+    prev_total = sum(prev_balance.values()) if prev_balance else total
     if new_txs:
         log.info(f"Found {len(new_txs)} new transaction(s)!")
         new_txs_chrono = list(reversed(new_txs))
+        running_balance = prev_total if (prev_total is not None and prev_total > 0) else total
         for tx in new_txs_chrono:
-            bal_after = tx["balance"] if tx.get("balance") is not None else total
+            if tx.get("balance") is not None:
+                bal_after = float(tx["balance"])
+            else:
+                bal_after = round(running_balance + tx["amount"], 2)
+            running_balance = bal_after
             notify_transaction(tx, bal_after)
+
+        current_balance["lunch_pass"] = running_balance
+        total = running_balance
     else:
         log.info("No new transactions found.")
 
@@ -751,6 +772,7 @@ def run_loop(config):
     log.info(f"Monitor started (PID: {os.getpid()}, interval: {interval}s)")
 
     last_check_time = 0
+    last_ping_time = time.time()
     offset = None
 
     try:
@@ -762,6 +784,17 @@ def run_loop(config):
                 except Exception as e:
                     log.error(f"Check failed: {e}")
                 last_check_time = time.time()
+
+            # Keep-alive ping for Render 24/7 continuous operation (every 10 minutes)
+            if now - last_ping_time >= 600:
+                last_ping_time = time.time()
+                ping_url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("SELF_PING_URL")
+                if ping_url:
+                    try:
+                        requests.get(f"{ping_url.rstrip('/')}/ping", timeout=10)
+                        log.info("Keep-alive ping sent to %s", ping_url)
+                    except Exception as e:
+                        log.debug("Keep-alive ping failed: %s", e)
 
             # Poll for Telegram commands like /balance
             offset = process_telegram_updates(config, offset=offset, timeout=2)

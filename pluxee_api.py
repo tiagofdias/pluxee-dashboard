@@ -61,6 +61,9 @@ def get_balance(api_claim: str, card_id: str) -> float:
     except requests.exceptions.RequestException as e:
         raise PluxeeConnectionError(f"Network error while fetching balance: {e}") from e
 
+    if res.status_code in (500, 502, 503, 504):
+        raise PluxeeConnectionError(f"Pluxee server maintenance or temporary outage (HTTP {res.status_code}).")
+
     if res.status_code == 401:
         raise PluxeeAuthError("Pluxee session unauthorized (401). ApiClaim has expired or is invalid.")
 
@@ -113,6 +116,9 @@ def get_movements(api_claim: str, benefit_id: str, num: int = 20) -> list:
     except requests.exceptions.RequestException as e:
         raise PluxeeConnectionError(f"Network error while fetching movements: {e}") from e
 
+    if res.status_code in (500, 502, 503, 504):
+        raise PluxeeConnectionError(f"Pluxee server maintenance or temporary outage (HTTP {res.status_code}).")
+
     if res.status_code == 401:
         raise PluxeeAuthError("Pluxee session unauthorized (401). ApiClaim has expired or is invalid.")
 
@@ -159,6 +165,43 @@ def get_movements(api_claim: str, benefit_id: str, num: int = 20) -> list:
     return transactions
 
 
+def compute_effective_balance(raw_card_balance: float, transactions: list) -> float:
+    """Compute the true real-time available balance.
+
+    In Pluxee Portugal, the card balance endpoint (/api/benefit/card/balance)
+    returns the accounting (ledger) balance, which often does NOT subtract
+    pending or recent card authorizations until settlement (1-2 business days).
+    However, recent movements (/movements) appear immediately with exact amounts.
+
+    This function reconciles the ledger balance with recent transactions so that
+    whenever a payment is made, the payment amount is immediately and accurately
+    subtracted from the available money to spend.
+    """
+    if not transactions:
+        return round(float(raw_card_balance), 2)
+
+    latest = transactions[0]
+    latest_amt = latest.get("amount", 0.0)
+    latest_bal = latest.get("balance")
+
+    # 1. If the latest movement already has a valid post-transaction balance:
+    if latest_bal is not None:
+        return round(float(latest_bal), 2)
+
+    # 2. If the latest movement does NOT have a balance yet (pending authorization):
+    # Search backwards for the most recent transaction with a known balance.
+    for i, tx in enumerate(transactions[1:], start=1):
+        if tx.get("balance") is not None:
+            accum = float(tx["balance"])
+            # Apply all pending transactions from that point forward
+            for pending_tx in reversed(transactions[:i]):
+                accum += pending_tx.get("amount", 0.0)
+            return round(accum, 2)
+
+    # 3. If no past transaction has a balance, subtract from raw_card_balance
+    return round(float(raw_card_balance) + latest_amt, 2)
+
+
 def fetch_all(api_claim: str, card_id: str, benefit_id: str, num: int = 20) -> dict:
     """One-shot: Fetch both current balance and recent transactions.
 
@@ -170,18 +213,22 @@ def fetch_all(api_claim: str, card_id: str, benefit_id: str, num: int = 20) -> d
                 "gift_pass": 0.0,
                 "conso_pass": 0.0
             },
+            "raw_balance": float,
             "transactions": [ ... ]
         }
     """
-    bal = get_balance(api_claim, card_id)
+    raw_bal = get_balance(api_claim, card_id)
     txs = get_movements(api_claim, benefit_id, num=num)
+    effective_bal = compute_effective_balance(raw_bal, txs)
 
     return {
         "balance": {
-            "lunch_pass": bal,
+            "lunch_pass": effective_bal,
             "eco_pass": 0.0,
             "gift_pass": 0.0,
             "conso_pass": 0.0,
         },
+        "raw_balance": raw_bal,
         "transactions": txs,
     }
+

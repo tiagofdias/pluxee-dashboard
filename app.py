@@ -120,13 +120,41 @@ def serve_js():
 
 @app.route("/data.json")
 def serve_data():
+    """Serve up-to-date balance and transaction data, preferring STATE_FILE from live monitor."""
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            return jsonify({
+                "updated_at": state.get("last_check") or datetime.now(timezone.utc).isoformat(),
+                "balance": state.get("balance", {}),
+                "transactions": state.get("transactions", []),
+            })
+        except Exception:
+            pass
+
+    # Try live fetch if credentials are configured
+    api_claim = _get_env("PLUXEE_API_CLAIM")
+    card_id = _get_env("PLUXEE_CARD_ID")
+    benefit_id = _get_env("PLUXEE_BENEFIT_ID")
+    if api_claim and card_id and benefit_id:
+        try:
+            result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=20)
+            return jsonify({
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "balance": result["balance"],
+                "transactions": result["transactions"],
+            })
+        except Exception:
+            pass
+
     return send_from_directory("static", "data.json")
 
 
-@app.route("/api/balance", methods=["POST"])
+@app.route("/api/balance", methods=["GET", "POST"])
 def get_balance():
     """Fetch Pluxee balance and transactions via Mobile API."""
-    data = request.get_json() or {}
+    data = (request.get_json(silent=True) or {}) if request.method == "POST" else {}
 
     api_claim = data.get("api_claim", "").strip() or _get_env("PLUXEE_API_CLAIM")
     card_id = data.get("card_id", "").strip() or _get_env("PLUXEE_CARD_ID")
@@ -142,11 +170,25 @@ def get_balance():
         return jsonify({
             "success": True,
             "balance": result["balance"],
+            "raw_balance": result.get("raw_balance"),
             "transactions": result["transactions"],
         })
     except pluxee_api.PluxeeAuthError as e:
         return jsonify({"error": f"Sessão expirada ou não autorizada: {str(e)}"}), 401
     except pluxee_api.PluxeeConnectionError as e:
+        if os.path.exists(STATE_FILE):
+            try:
+                with open(STATE_FILE, "r", encoding="utf-8") as f:
+                    cached_state = json.load(f)
+                return jsonify({
+                    "success": True,
+                    "cached": True,
+                    "warning": "Servidores da Pluxee temporariamente inacessíveis. A apresentar último saldo sincronizado.",
+                    "balance": cached_state.get("balance", {}),
+                    "transactions": cached_state.get("transactions", []),
+                }), 200
+            except Exception:
+                pass
         return jsonify({"error": f"Erro de ligação aos servidores da Pluxee: {str(e)}"}), 502
     except Exception as e:
         traceback.print_exc()
@@ -250,25 +292,10 @@ def notification_start():
         "interval": interval,
     }
 
-    if IS_RENDER:
-        try:
-            from monitor import check_for_new_transactions
-            count, balance = check_for_new_transactions(config)
-            total = sum(balance.values()) if balance else 0
-            return jsonify({
-                "success": True,
-                "running": True,
-                "mode": "cron",
-                "new_transactions": count,
-                "balance": total,
-            })
-        except Exception as e:
-            traceback.print_exc()
-            return jsonify({"error": f"Check failed: {str(e)}"}), 500
-    else:
-        if _is_monitor_running():
-            return jsonify({"error": "Monitor is already running", "running": True}), 409
+    if _is_monitor_running():
+        return jsonify({"success": True, "running": True, "pid": _read_pid()}), 200
 
+    if not IS_RENDER:
         _save_env({
             "PLUXEE_API_CLAIM": api_claim,
             "PLUXEE_CARD_ID": card_id,
@@ -276,37 +303,44 @@ def notification_start():
             "POLL_INTERVAL_SECONDS": str(interval),
         })
 
-        try:
-            import sys
-            import time
-            proc = subprocess.Popen(
-                [sys.executable, MONITOR_SCRIPT],
-                cwd=os.path.dirname(__file__),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
-            time.sleep(1)
-            if proc.poll() is not None:
-                return jsonify({"error": "Monitor process exited immediately. Check logs."}), 500
+    try:
+        import sys
+        import time
+        env = os.environ.copy()
+        env["PLUXEE_API_CLAIM"] = api_claim
+        env["PLUXEE_CARD_ID"] = card_id
+        env["PLUXEE_BENEFIT_ID"] = benefit_id
+        if telegram_token:
+            env["TELEGRAM_TOKEN"] = telegram_token
+        if telegram_chat_id:
+            env["TELEGRAM_CHAT_ID"] = telegram_chat_id
+        env["POLL_INTERVAL_SECONDS"] = str(interval)
 
-            return jsonify({
-                "success": True,
-                "running": True,
-                "mode": "subprocess",
-                "pid": proc.pid,
-            })
-        except Exception as e:
-            return jsonify({"error": f"Failed to start monitor: {str(e)}"}), 500
+        proc = subprocess.Popen(
+            [sys.executable, MONITOR_SCRIPT],
+            cwd=os.path.dirname(__file__),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=env,
+        )
+        time.sleep(1)
+        if proc.poll() is not None:
+            return jsonify({"error": "Monitor process exited immediately. Check logs."}), 500
+
+        return jsonify({
+            "success": True,
+            "running": True,
+            "mode": "subprocess",
+            "pid": proc.pid,
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to start monitor: {str(e)}"}), 500
 
 
 @app.route("/api/notifications/stop", methods=["POST"])
 def notification_stop():
     """Stop the background monitor."""
-    if IS_RENDER:
-        return jsonify({"success": True, "running": False,
-                        "message": "On Render, monitoring is handled by cron-job.org"})
-
     pid = _read_pid()
     if not pid or not _is_monitor_running():
         return jsonify({"success": True, "running": False, "message": "Monitor was not running"})

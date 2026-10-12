@@ -3,10 +3,14 @@ services:
     name: pluxee-dashboard
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    startCommand: python run.py
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: RENDER
+        value: "true"
+      - key: POLL_INTERVAL_SECONDS
+        value: "60"
       - key: PLUXEE_API_CLAIM
         sync: false  # Set manually in Render dashboard
       - key: PLUXEE_CARD_ID

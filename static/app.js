@@ -153,7 +153,10 @@
         return;
       }
       if (data.success) {
-        renderBalance(data.balance, data.transactions);
+        renderBalance(data.balance, data.transactions, data.updated_at);
+        if (data.cached && data.warning) {
+          showError(data.warning);
+        }
       }
     } catch (_) {
       showError("Erro de ligação — verifique a sua ligação à internet.");
@@ -171,8 +174,17 @@
       loginView.style.animation = "";
       balanceView.classList.remove("hidden");
 
+      // Reconcile effective lunch pass balance with latest transaction
+      let lunchVal = b.lunch_pass || 0;
+      if (txs && txs.length > 0) {
+        const latest = txs[0];
+        if (latest.balance !== null && latest.balance !== undefined) {
+          lunchVal = Number(latest.balance);
+        }
+      }
+
       const vals = {
-        lunch: b.lunch_pass || 0,
+        lunch: lunchVal,
         eco:   b.eco_pass   || 0,
         gift:  b.gift_pass  || 0,
         conso: b.conso_pass || 0,
@@ -221,7 +233,7 @@
       // Init notification panel
       fetchNotifStatus();
       if (notifPollTimer) clearInterval(notifPollTimer);
-      notifPollTimer = setInterval(fetchNotifStatus, 15000);
+      notifPollTimer = setInterval(fetchNotifStatus, 10000);
     }, 280);
   }
 
@@ -308,28 +320,47 @@
   var notifTestBtn     = $("notif-test-btn");
   var notifPollTimer   = null;
 
+  var lastKnownCheck   = null;
+
   function updateNotifUI(data) {
     if (!data) return;
 
     if (notifStatusDot) notifStatusDot.className = "notif-status-dot active";
-    if (notifStatusLabel) notifStatusLabel.textContent = "Ativo";
-    if (notifSubtitle) notifSubtitle.textContent = "Alertas instantâneos via @CartaoRefeicaoBot";
+    if (notifStatusLabel) notifStatusLabel.textContent = "Ativo 24/7";
+    if (notifSubtitle) notifSubtitle.textContent = "Alertas em tempo real via @CartaoRefeicaoBot";
 
     if (data.interval && notifIntervalVal) {
-      var mins = Math.round(data.interval / 60);
-      notifIntervalVal.textContent = mins + " min (GitHub Actions)";
+      if (data.interval <= 60) {
+        notifIntervalVal.textContent = data.interval + "s (Render 24/7 Tempo Real)";
+      } else {
+        var mins = Math.round(data.interval / 60);
+        notifIntervalVal.textContent = mins + " min (Render 24/7)";
+      }
     }
 
     if (data.last_check && notifLastCheck) {
       try {
         var d = new Date(data.last_check);
         notifLastCheck.textContent = d.toLocaleString("pt-PT", {
-          hour: "2-digit", minute: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit",
           day: "numeric", month: "short",
         });
       } catch (_) {
         notifLastCheck.textContent = data.last_check;
       }
+
+      // If new check occurred and dashboard is active, auto-refresh live data
+      if (lastKnownCheck && lastKnownCheck !== data.last_check && !balanceView.classList.contains("hidden")) {
+        fetch("./data.json?cb=" + Date.now())
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (d.balance && d.transactions) {
+              renderBalance(d.balance, d.transactions, d.updated_at);
+            }
+          })
+          .catch(function () {});
+      }
+      lastKnownCheck = data.last_check;
     }
   }
 

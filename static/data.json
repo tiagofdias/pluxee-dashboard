@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-10T15:25:31.624141+00:00",
+  "updated_at": "2026-10-12T15:52:37.863572+00:00",
   "balance": {
     "lunch_pass": 43.64,
     "eco_pass": 0.0,
@@ -11,10 +11,10 @@
       "date": "10/10/2026",
       "description": "MBH BRAGA",
       "amount": -33.8,
-      "balance": 77.44,
+      "balance": 43.64,
       "currency": "EUR",
-      "effective_date": "10/10/2026",
-      "raw_description": "Compra  MBH BRAGA,4700-424 BRAG,PRT",
+      "effective_date": "11/10/2026",
+      "raw_description": "Compra MBH BRAGA,4700-424 BRAG,PRT",
       "is_rejected": false
     },
     {
