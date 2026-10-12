@@ -695,7 +695,7 @@ body {
 
 .market-scale-bar-track {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
   position: relative;
 }
@@ -724,15 +724,20 @@ body {
   border: 1px solid rgba(112, 121, 255, 0.15);
 }
 
-.seg-big4 {
-  background: rgba(176, 122, 255, 0.08);
-  border: 1px solid rgba(176, 122, 255, 0.2);
-}
-
 .seg-capgemini {
   background: linear-gradient(135deg, rgba(46, 213, 115, 0.15), rgba(245, 158, 11, 0.15));
   border: 1.5px solid var(--success);
   box-shadow: 0 0 16px rgba(46, 213, 115, 0.2);
+}
+
+.seg-ceiling {
+  background: rgba(176, 122, 255, 0.08);
+  border: 1px solid rgba(176, 122, 255, 0.25);
+}
+
+.seg-top {
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 .seg-val {
