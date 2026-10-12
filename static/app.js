@@ -105,16 +105,34 @@
     return { name: "Restauração & Cafés", group: "dining" };
   }
 
-  // Calculate Business Days in a given month/year
+  // Portuguese national holidays (weekdays and public holidays)
+  var PT_HOLIDAYS = {
+    "2026-01-01": "Ano Novo",
+    "2026-04-03": "Sexta-feira Santa",
+    "2026-04-05": "Páscoa",
+    "2026-04-25": "Dia da Liberdade",
+    "2026-05-01": "Dia do Trabalhador",
+    "2026-06-04": "Corpo de Deus",
+    "2026-06-10": "Dia de Portugal",
+    "2026-08-15": "Assunção de N. Sra",
+    "2026-10-05": "Implantação da República",
+    "2026-11-01": "Todos os Santos",
+    "2026-12-01": "Restauração da Independência",
+    "2026-12-08": "Imaculada Conceição",
+    "2026-12-25": "Natal"
+  };
+
+  // Calculate Exact Business Days in a given month/year (excluding weekends & national holidays)
   function countBusinessDays(year, month) {
     var count = 0;
-    var date = new Date(year, month, 1);
-    while (date.getMonth() === month) {
-      var day = date.getDay();
-      if (day !== 0 && day !== 6) { // Monday to Friday
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (var d = 1; d <= daysInMonth; d++) {
+      var date = new Date(year, month, d);
+      var dayOfWeek = date.getDay();
+      var dateKey = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !PT_HOLIDAYS[dateKey]) {
         count++;
       }
-      date.setDate(date.getDate() + 1);
     }
     return count;
   }
@@ -202,22 +220,20 @@
     statMonthSpend.textContent = fmt(currentMonthSpend);
     statMonthTxCount.textContent = currentMonthCount + " despesas registadas em Outubro";
 
-    // 5. Capgemini Payroll Forecaster (Next Recharge)
-    // Rule: Reload happens on weekdays 23-28 before weekend
-    var targetReloadDate = new Date(currentYear, currentMonth, 23); // 23 Oct 2026 is Friday
+    // 5. Capgemini Payroll Forecaster (Exact Next Recharge)
+    // Rule: Payroll target is 24th/25th. If falling on weekend, executes on Friday 23rd or Monday 26th.
+    var currentMonthWorkDays = countBusinessDays(currentYear, currentMonth); // 21 days in Oct 2026
+    var exactNextAmount = Math.round(currentMonthWorkDays * DAILY_RATE * 100) / 100; // 202.23 €
+
+    var targetReloadDay = 23; // Friday, 23 Oct 2026
     var today = now.getDate();
-    var daysUntilReload = 23 - today;
-    if (daysUntilReload < 0) daysUntilReload = 1;
+    var daysUntilReload = Math.max(targetReloadDay - today, 1);
 
-    // Work days in current month (October has 22 weekdays)
-    var currentMonthWorkDays = countBusinessDays(currentYear, currentMonth);
-    var estimatedNextAmount = currentMonthWorkDays * DAILY_RATE; // ~211.86 €
-
-    statNextReloadAmount.textContent = "~" + fmt(estimatedNextAmount);
-    statNextReloadDate.textContent = "Previsto: 23 de Outubro (" + currentMonthWorkDays + " dias úteis)";
+    statNextReloadAmount.textContent = fmt(exactNextAmount);
+    statNextReloadDate.textContent = "Data prevista: 23 – 26 de Outubro (" + currentMonthWorkDays + " dias úteis)";
 
     // Daily recommended runway budget
-    var dailyRunway = currentBalance > 0 ? (currentBalance / (daysUntilReload || 1)) : 0;
+    var dailyRunway = currentBalance > 0 ? (currentBalance / daysUntilReload) : 0;
     statDailyBudget.textContent = fmt(dailyRunway);
     statDaysLeft.textContent = daysUntilReload + " dias até à recarga (~dia 23)";
 
