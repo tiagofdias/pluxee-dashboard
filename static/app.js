@@ -105,32 +105,69 @@
     return { name: "Restauração & Cafés", group: "dining" };
   }
 
-  // Portuguese national holidays (weekdays and public holidays)
-  var PT_HOLIDAYS = {
-    "2026-01-01": "Ano Novo",
-    "2026-04-03": "Sexta-feira Santa",
-    "2026-04-05": "Páscoa",
-    "2026-04-25": "Dia da Liberdade",
-    "2026-05-01": "Dia do Trabalhador",
-    "2026-06-04": "Corpo de Deus",
-    "2026-06-10": "Dia de Portugal",
-    "2026-08-15": "Assunção de N. Sra",
-    "2026-10-05": "Implantação da República",
-    "2026-11-01": "Todos os Santos",
-    "2026-12-01": "Restauração da Independência",
-    "2026-12-08": "Imaculada Conceição",
-    "2026-12-25": "Natal"
-  };
+  // Dynamic Portuguese Holidays Generator (Computus Meeus/Jones/Butcher algorithm for ANY year)
+  function getPortugueseHolidays(year) {
+    var holidays = {};
 
-  // Calculate Exact Business Days in a given month/year (excluding weekends & national holidays)
+    // 1. Fixed National Holidays
+    var fixed = [
+      "01-01", // Ano Novo
+      "04-25", // Dia da Liberdade
+      "05-01", // Dia do Trabalhador
+      "06-10", // Dia de Portugal
+      "08-15", // Assunção de Nossa Senhora
+      "10-05", // Implantação da República
+      "11-01", // Todos os Santos
+      "12-01", // Restauração da Independência
+      "12-08", // Imaculada Conceição
+      "12-25"  // Natal
+    ];
+    fixed.forEach(function (md) {
+      holidays[year + "-" + md] = true;
+    });
+
+    // 2. Mobile Holidays (Easter, Good Friday, Corpus Christi)
+    var a = year % 19;
+    var b = Math.floor(year / 100);
+    var c = year % 100;
+    var d = Math.floor(b / 4);
+    var e = b % 4;
+    var f = Math.floor((b + 8) / 25);
+    var g = Math.floor((b - f + 1) / 3);
+    var h = (19 * a + b - d - g + 15) % 30;
+    var i = Math.floor(c / 4);
+    var k = c % 4;
+    var l = (32 + 2 * e + 2 * i - h - k) % 7;
+    var m = Math.floor((a + 11 * h + 22 * l) / 451);
+    var easterMonth = Math.floor((h + l - 7 * m + 114) / 31) - 1; // 0-indexed
+    var easterDay = ((h + l - 7 * m + 114) % 31) + 1;
+    var easterDate = new Date(year, easterMonth, easterDay);
+
+    // Good Friday (Sexta-feira Santa) = Easter - 2 days
+    var goodFriday = new Date(easterDate);
+    goodFriday.setDate(easterDate.getDate() - 2);
+    var gfKey = year + "-" + String(goodFriday.getMonth() + 1).padStart(2, "0") + "-" + String(goodFriday.getDate()).padStart(2, "0");
+    holidays[gfKey] = true;
+
+    // Corpus Christi (Corpo de Deus) = Easter + 60 days
+    var corpusChristi = new Date(easterDate);
+    corpusChristi.setDate(easterDate.getDate() + 60);
+    var ccKey = year + "-" + String(corpusChristi.getMonth() + 1).padStart(2, "0") + "-" + String(corpusChristi.getDate()).padStart(2, "0");
+    holidays[ccKey] = true;
+
+    return holidays;
+  }
+
+  // Calculate Exact Business Days in a given month/year (excluding weekends & national holidays for ANY year)
   function countBusinessDays(year, month) {
+    var holidays = getPortugueseHolidays(year);
     var count = 0;
     var daysInMonth = new Date(year, month + 1, 0).getDate();
     for (var d = 1; d <= daysInMonth; d++) {
       var date = new Date(year, month, d);
       var dayOfWeek = date.getDay();
       var dateKey = year + "-" + String(month + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
-      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !PT_HOLIDAYS[dateKey]) {
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidays[dateKey]) {
         count++;
       }
     }
