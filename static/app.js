@@ -227,6 +227,27 @@
     var latestReload = reloads.length > 0 ? reloads[0] : null;
     var reloadBase = latestReload ? latestReload.amount : 211.86;
 
+    // Auto-detect dynamic daily rate from latest reload (self-adapts if Capgemini increases pay)
+    var activeDailyRate = DAILY_RATE;
+    if (latestReload && latestReload.tx) {
+      var rDate = parseTxDate(latestReload.date);
+      var rWorkdays = countBusinessDays(rDate.getFullYear(), rDate.getMonth());
+      if (rWorkdays > 0) {
+        var inferred = Math.round((latestReload.amount / rWorkdays) * 100) / 100;
+        if (inferred >= 6.00 && inferred <= 25.00) {
+          activeDailyRate = inferred;
+        }
+      }
+    }
+
+    // Update dynamic rate indicators across UI
+    var brandRateEl = $("brand-rate-text");
+    if (brandRateEl) brandRateEl.textContent = fmt(activeDailyRate);
+    var pillRateEl = $("pill-rate-val");
+    if (pillRateEl) pillRateEl.textContent = fmt(activeDailyRate) + " / dia útil";
+    var intelFormulaEl = $("intel-formula-val");
+    if (intelFormulaEl) intelFormulaEl.textContent = "Dias Úteis × " + fmt(activeDailyRate);
+
     // 3. Render Balance Card & Progress Bar
     countUp(heroAmount, currentBalance);
     var remainingPct = Math.min(Math.max((currentBalance / reloadBase) * 100, 0), 100);
@@ -260,7 +281,7 @@
     // 5. Capgemini Payroll Forecaster (Exact Next Recharge)
     // Rule: Payroll target is 24th/25th. If falling on weekend, executes on Friday 23rd or Monday 26th.
     var currentMonthWorkDays = countBusinessDays(currentYear, currentMonth); // 21 days in Oct 2026
-    var exactNextAmount = Math.round(currentMonthWorkDays * DAILY_RATE * 100) / 100; // 202.23 €
+    var exactNextAmount = Math.round(currentMonthWorkDays * activeDailyRate * 100) / 100; // auto-calculated with activeDailyRate
 
     var targetReloadDay = 23; // Friday, 23 Oct 2026
     var today = now.getDate();
