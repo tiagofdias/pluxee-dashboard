@@ -16,6 +16,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 import pluxee_api
+import history_store
 
 app = Flask(__name__, static_folder="static")
 CORS(app)
@@ -139,11 +140,14 @@ def serve_data():
     benefit_id = _get_env("PLUXEE_BENEFIT_ID")
     if api_claim and card_id and benefit_id:
         try:
-            result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=20)
+            result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=100)
+            existing_history = history_store.load_history(DATA_DIR)
+            all_txs = history_store.merge_transactions(existing_history, result["transactions"])
+            history_store.save_history(DATA_DIR, all_txs)
             return jsonify({
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "balance": result["balance"],
-                "transactions": result["transactions"],
+                "transactions": all_txs,
             })
         except Exception:
             pass
@@ -153,7 +157,7 @@ def serve_data():
 
 @app.route("/api/balance", methods=["GET", "POST"])
 def get_balance():
-    """Fetch Pluxee balance and transactions via Mobile API."""
+    """Fetch Pluxee balance and transactions via Mobile API, merging with historical ledger."""
     data = (request.get_json(silent=True) or {}) if request.method == "POST" else {}
 
     api_claim = data.get("api_claim", "").strip() or _get_env("PLUXEE_API_CLAIM")
@@ -166,12 +170,31 @@ def get_balance():
         }), 400
 
     try:
-        result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=20)
+        result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=100)
+        # Merge fetched transactions into historical ledger
+        existing_history = history_store.load_history(DATA_DIR)
+        all_transactions = history_store.merge_transactions(existing_history, result["transactions"])
+        history_store.save_history(DATA_DIR, all_transactions)
+
+        # Update cached state
+        state = {
+            "last_check": datetime.now(timezone.utc).isoformat(),
+            "balance": result["balance"],
+            "transactions": all_transactions,
+            "fingerprints": [history_store.tx_fingerprint(t) for t in all_transactions],
+            "tx_count": len(all_transactions),
+        }
+        try:
+            with open(STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+        except Exception:
+            pass
+
         return jsonify({
             "success": True,
             "balance": result["balance"],
             "raw_balance": result.get("raw_balance"),
-            "transactions": result["transactions"],
+            "transactions": all_transactions,
         })
     except pluxee_api.PluxeeAuthError as e:
         return jsonify({"error": f"Sessão expirada ou não autorizada: {str(e)}"}), 401

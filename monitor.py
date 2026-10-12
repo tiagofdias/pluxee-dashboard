@@ -26,6 +26,7 @@ import requests
 # Add project root to path
 sys.path.insert(0, os.path.dirname(__file__))
 from pluxee_api import fetch_all, PluxeeAuthError, PluxeeConnectionError
+import history_store
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -106,22 +107,26 @@ def load_state():
 
 
 def save_state(balance, transactions, stale_skip_count=0):
-    """Persist the current state to disk and update static site data."""
+    """Persist the current state to disk, merge into historical ledger, and update static site data."""
     os.makedirs(DATA_DIR, exist_ok=True)
-    fingerprints = [_tx_fingerprint(tx) for tx in transactions]
+    existing_history = history_store.load_history(DATA_DIR)
+    all_transactions = history_store.merge_transactions(existing_history, transactions)
+    history_store.save_history(DATA_DIR, all_transactions)
+
+    fingerprints = [_tx_fingerprint(tx) for tx in all_transactions]
     state = {
         "last_check": datetime.now(timezone.utc).isoformat(),
         "balance": balance,
-        "transactions": transactions,
+        "transactions": all_transactions,
         "fingerprints": fingerprints,
-        "tx_count": len(transactions),
+        "tx_count": len(all_transactions),
         "stale_skip_count": stale_skip_count,
     }
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
     # Export static/data.json for GitHub Pages dashboard
-    _export_site_data(balance, transactions)
+    _export_site_data(balance, all_transactions)
 
 
 def _export_site_data(balance, transactions):
@@ -143,8 +148,7 @@ def _export_site_data(balance, transactions):
 
 def _tx_fingerprint(tx):
     """Create a unique fingerprint for a transaction."""
-    raw = f"{tx['date']}|{tx['description']}|{tx['amount']}"
-    return hashlib.md5(raw.encode()).hexdigest()
+    return history_store.tx_fingerprint(tx)
 
 
 # ---------------------------------------------------------------------------
@@ -463,7 +467,7 @@ def handle_balance_command(config, chat_id):
         card_id = config.get("card_id") or os.getenv("PLUXEE_CARD_ID", "").strip()
         benefit_id = config.get("benefit_id") or os.getenv("PLUXEE_BENEFIT_ID", "").strip()
         if api_claim and card_id and benefit_id:
-            result = fetch_all(api_claim, card_id, benefit_id, num=20)
+            result = fetch_all(api_claim, card_id, benefit_id, num=100)
             balance = result.get("balance")
             transactions = result.get("transactions")
     except Exception as e:
@@ -623,7 +627,7 @@ def check_for_new_transactions(config):
     log.info("Checking for new transactions via Pluxee Mobile API...")
 
     try:
-        result = fetch_all(config["api_claim"], config["card_id"], config["benefit_id"], num=20)
+        result = fetch_all(config["api_claim"], config["card_id"], config["benefit_id"], num=100)
         _last_auth_notif_time = 0  # Reset cooldown on successful fetch
     except PluxeeAuthError as e:
         log.error(f"Authentication error: {e}")
@@ -701,11 +705,23 @@ def check_for_new_transactions(config):
     new_fingerprints = current_fingerprints - prev_fingerprints
     new_txs = [tx for tx in current_txs if _tx_fingerprint(tx) in new_fingerprints]
 
+    # Guard: only notify for transactions that are chronologically new (>= latest known date).
+    # Older historical transactions being accumulated/backfilled will be saved silently.
+    prev_tx_list = prev_state.get("transactions", [])
+    if prev_tx_list:
+        latest_prev_date = history_store._parse_tx_date(prev_tx_list[0])
+        notify_txs = [
+            tx for tx in new_txs
+            if history_store._parse_tx_date(tx) >= latest_prev_date
+        ]
+    else:
+        notify_txs = []
+
     prev_balance = prev_state.get("balance", {})
     prev_total = sum(prev_balance.values()) if prev_balance else total
-    if new_txs:
-        log.info(f"Found {len(new_txs)} new transaction(s)!")
-        new_txs_chrono = list(reversed(new_txs))
+    if notify_txs:
+        log.info(f"Found {len(notify_txs)} new transaction(s) to notify!")
+        new_txs_chrono = list(reversed(notify_txs))
         running_balance = prev_total if (prev_total is not None and prev_total > 0) else total
         for tx in new_txs_chrono:
             if tx.get("balance") is not None:
@@ -718,7 +734,7 @@ def check_for_new_transactions(config):
         current_balance["lunch_pass"] = running_balance
         total = running_balance
     else:
-        log.info("No new transactions found.")
+        log.info(f"No new notifications required ({len(new_txs)} historical records merged silently).")
 
     # Check for balance changes without transactions
     balance_changed = False

@@ -85,13 +85,13 @@ def get_balance(api_claim: str, card_id: str) -> float:
         raise PluxeeApiError(f"Could not parse balance value '{balance_val}': {e}") from e
 
 
-def get_movements(api_claim: str, benefit_id: str, num: int = 20) -> list:
+def get_movements(api_claim: str, benefit_id: str, num: int = 100) -> list:
     """Fetch recent movements/transactions for a benefit card.
 
     Args:
         api_claim: Mobile API session claim token.
         benefit_id: Benefit reference ID, e.g. Fjzuh5H...
-        num: Number of movements to retrieve (default: 20).
+        num: Number of movements to retrieve (default: 100).
 
     Returns:
         list of dicts: [
@@ -202,7 +202,7 @@ def compute_effective_balance(raw_card_balance: float, transactions: list) -> fl
     return round(float(raw_card_balance) + latest_amt, 2)
 
 
-def fetch_all(api_claim: str, card_id: str, benefit_id: str, num: int = 20) -> dict:
+def fetch_all(api_claim: str, card_id: str, benefit_id: str, num: int = 100) -> dict:
     """One-shot: Fetch both current balance and recent transactions.
 
     Returns:
