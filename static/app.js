@@ -1,307 +1,360 @@
 /**
- * Pluxee Balance Dashboard — Frontend Logic v2
- * Auto-loads balance data. No login view needed.
+ * Pluxee Dashboard — Full-Width Financial Analytics v3
+ * Real-time monitoring, monthly metrics, spend breakdown & interactive search.
  */
 (function () {
   "use strict";
 
-  /* ---- DOM ---- */
-  var $ = function (s) { return document.getElementById(s); };
+  // Elements
+  var $ = function (id) { return document.getElementById(id); };
 
-  var heroAmount      = $("hero-amount");
-  var heroUpdated     = $("hero-updated");
-  var heroBarFill     = $("hero-bar-fill");
-  var heroShimmer     = $("hero-shimmer");
-  var liveIndicator   = $("live-indicator");
+  var heroAmount         = $("hero-amount");
+  var balanceBarFill     = $("balance-bar-fill");
+  var balanceBarPct      = $("balance-bar-pct");
+  var balanceReloadRef   = $("balance-reload-ref");
 
-  var statLastSpend   = $("stat-last-spend-val");
-  var statTxCount     = $("stat-tx-count-val");
-  var statDailyAvg    = $("stat-daily-avg-val");
+  var statMonthSpend     = $("stat-month-spend");
+  var statMonthTxCount   = $("stat-month-tx-count");
+  var statDailyBudget    = $("stat-daily-budget");
+  var statDaysLeft       = $("stat-days-left");
+  var statLastReload     = $("stat-last-reload");
+  var statLastReloadDate = $("stat-last-reload-date");
 
-  var txCount         = $("tx-count");
-  var txList          = $("tx-list");
-  var txEmpty         = $("tx-empty");
+  var txTotalBadge       = $("tx-total-badge");
+  var txList             = $("tx-list");
+  var txSearchInput      = $("tx-search-input");
+  var merchantList       = $("merchant-list");
 
-  var errorToast      = $("error-toast");
-  var errorText       = $("error-text");
-  var errorDismiss    = $("error-dismiss");
+  var metricAvgTx        = $("metric-avg-tx");
+  var metricBiggestSpend = $("metric-biggest-spend");
+  var metricActiveDays   = $("metric-active-days");
+  var metricNextReload   = $("metric-next-reload");
 
-  var pollTimer       = null;
-  var lastKnownCheck  = null;
-  var hasRendered     = false;
-  var MAX_BALANCE     = 210; // max expected monthly for bar width calc
+  var syncTime           = $("sync-time");
+  var liveIndicator      = $("live-indicator");
+  var errorToast         = $("error-toast");
+  var errorText          = $("error-text");
+  var errorDismiss       = $("error-dismiss");
 
-  /* ---- Helpers ---- */
+  var rawTransactions    = [];
+  var lastKnownCheck     = null;
+  var pollTimer          = null;
+
+  // Currency Formatter
   function fmt(val) {
     return new Intl.NumberFormat("pt-PT", {
       style: "currency",
       currency: "EUR",
-    }).format(val);
+    }).format(val || 0);
   }
 
+  // Count up animation
   function countUp(el, to, ms) {
-    ms = ms || 1200;
+    ms = ms || 1000;
     var t0 = performance.now();
     (function tick(now) {
       var p = Math.min((now - t0) / ms, 1);
-      var e = 1 - Math.pow(1 - p, 3); // ease-out cubic
+      var e = 1 - Math.pow(1 - p, 3);
       el.textContent = fmt(to * e);
       if (p < 1) requestAnimationFrame(tick);
     })(t0);
   }
 
   function showError(msg) {
-    errorText.textContent = msg;
-    errorToast.classList.remove("hidden");
-  }
-
-  function hideError() {
-    errorToast.classList.add("hidden");
+    if (errorText) errorText.textContent = msg;
+    if (errorToast) errorToast.classList.remove("hidden");
   }
 
   if (errorDismiss) {
-    errorDismiss.addEventListener("click", hideError);
+    errorDismiss.addEventListener("click", function () {
+      errorToast.classList.add("hidden");
+    });
   }
 
-  function formatTimestamp(dateStr) {
-    try {
-      var d = new Date(dateStr);
-      var time = d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
-      var date = d.toLocaleDateString("pt-PT", { day: "numeric", month: "short" });
-      return time + " · " + date;
-    } catch (_) {
-      return dateStr;
+  // Parse Portuguese Date: DD/MM/YYYY
+  function parseDate(dStr) {
+    if (!dStr) return new Date();
+    var parts = dStr.split(" ")[0].split("/");
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
     }
+    return new Date(dStr);
   }
 
-  /* ---- Load data ---- */
-  function loadData() {
-    // 1. Try server API first (Render deployment)
+  // Clean Merchant Name
+  function cleanMerchantName(desc) {
+    if (!desc) return "Outros";
+    var d = desc.trim();
+    if (d.startsWith("Glovo")) return "Glovo";
+    if (d.includes("PINGO DOCE")) return "Pingo Doce";
+    if (d.includes("MCDONALDS")) return "McDonald's";
+    if (d.includes("Carregamento")) return "Carregamento Empresa";
+    // Return first 2-3 words capitalized
+    return d.split(" ").slice(0, 3).join(" ");
+  }
+
+  // Main Render Function
+  function renderDashboard(balanceData, txs, updatedAt) {
+    rawTransactions = txs || [];
+
+    // Reconcile effective lunch pass balance
+    var lunchBalance = balanceData.lunch_pass || 0;
+    if (rawTransactions.length > 0 && rawTransactions[0].balance !== null && rawTransactions[0].balance !== undefined) {
+      lunchBalance = Number(rawTransactions[0].balance);
+    }
+
+    // 1. Sync timestamp
+    if (updatedAt) {
+      var d = new Date(updatedAt);
+      syncTime.textContent = "Sincronizado às " + d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+    } else {
+      syncTime.textContent = "Atualizado agora";
+    }
+
+    // 2. Find last reload (income > 50€)
+    var lastReloadTx = null;
+    for (var i = 0; i < rawTransactions.length; i++) {
+      if (rawTransactions[i].amount > 50) {
+        lastReloadTx = rawTransactions[i];
+        break;
+      }
+    }
+    var reloadBase = lastReloadTx ? lastReloadTx.amount : 211.86;
+    if (lastReloadTx) {
+      statLastReload.textContent = "+" + fmt(lastReloadTx.amount);
+      statLastReloadDate.textContent = lastReloadTx.description + " · " + lastReloadTx.date;
+    } else {
+      statLastReload.textContent = "—";
+      statLastReloadDate.textContent = "Sem registo recente";
+    }
+
+    // 3. Render Available Balance & Progress Bar
+    countUp(heroAmount, lunchBalance);
+    var remainingPct = Math.min(Math.max((lunchBalance / reloadBase) * 100, 0), 100);
+    setTimeout(function () {
+      balanceBarFill.style.width = remainingPct.toFixed(1) + "%";
+    }, 150);
+    balanceBarPct.textContent = remainingPct.toFixed(0) + "% restante";
+    balanceReloadRef.textContent = "Base: " + fmt(reloadBase);
+
+    // 4. Current Month Spend Analytics
+    // Determine the active month from the latest transaction or current date
+    var now = new Date();
+    var targetMonth = now.getMonth();
+    var targetYear = now.getFullYear();
+    if (rawTransactions.length > 0) {
+      var latestDate = parseDate(rawTransactions[0].date);
+      targetMonth = latestDate.getMonth();
+      targetYear = latestDate.getFullYear();
+    }
+
+    var monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    var currentMonthName = monthNames[targetMonth];
+
+    var currentMonthExpenses = 0;
+    var currentMonthExpenseCount = 0;
+    var maxExpenseThisMonth = 0;
+    var activeDaysMap = {};
+    var merchantTotals = {};
+
+    rawTransactions.forEach(function (tx) {
+      if (tx.amount < 0) {
+        var tDate = parseDate(tx.date);
+        var cost = Math.abs(tx.amount);
+
+        // Group by merchant across recent history
+        var mName = cleanMerchantName(tx.description);
+        merchantTotals[mName] = (merchantTotals[mName] || 0) + cost;
+
+        // Current month filter
+        if (tDate.getMonth() === targetMonth && tDate.getFullYear() === targetYear) {
+          currentMonthExpenses += cost;
+          currentMonthExpenseCount++;
+          if (cost > maxExpenseThisMonth) {
+            maxExpenseThisMonth = cost;
+          }
+          var dayKey = tDate.getDate();
+          activeDaysMap[dayKey] = true;
+        }
+      }
+    });
+
+    statMonthSpend.textContent = fmt(currentMonthExpenses);
+    statMonthTxCount.textContent = currentMonthExpenseCount + " despesas em " + currentMonthName;
+
+    // 5. Daily Runway Budget
+    // Company reloads are usually around the 24th
+    var reloadDayOfMonth = 24;
+    var todayDay = now.getDate();
+    var daysUntilReload = reloadDayOfMonth > todayDay ? (reloadDayOfMonth - todayDay) : (30 - todayDay + reloadDayOfMonth);
+    if (daysUntilReload <= 0) daysUntilReload = 1;
+
+    var dailyBudget = lunchBalance > 0 ? (lunchBalance / daysUntilReload) : 0;
+    statDailyBudget.textContent = fmt(dailyBudget);
+    statDaysLeft.textContent = daysUntilReload + " dias até à recarga (~dia " + reloadDayOfMonth + ")";
+
+    // 6. Additional Card Metrics Panel
+    var avgTx = currentMonthExpenseCount > 0 ? (currentMonthExpenses / currentMonthExpenseCount) : 0;
+    metricAvgTx.textContent = fmt(avgTx);
+    metricBiggestSpend.textContent = maxExpenseThisMonth > 0 ? fmt(maxExpenseThisMonth) : "—";
+    var activeDaysCount = Object.keys(activeDaysMap).length;
+    metricActiveDays.textContent = activeDaysCount + " dias";
+    metricNextReload.textContent = "~24 de " + currentMonthName;
+
+    // 7. Render Top Merchants
+    renderTopMerchants(merchantTotals);
+
+    // 8. Render Transactions List
+    filterAndRenderTransactions("");
+  }
+
+  // Render Top Merchants with Progress Bars
+  function renderTopMerchants(merchantTotals) {
+    merchantList.innerHTML = "";
+    var sorted = Object.keys(merchantTotals).map(function (k) {
+      return { name: k, total: merchantTotals[k] };
+    }).sort(function (a, b) {
+      return b.total - a.total;
+    }).slice(0, 5);
+
+    if (sorted.length === 0) {
+      merchantList.innerHTML = '<p style="color:var(--text-3); font-size:0.8rem;">Sem dados suficientes.</p>';
+      return;
+    }
+
+    var highest = sorted[0].total || 1;
+
+    sorted.forEach(function (m) {
+      var pct = Math.min((m.total / highest) * 100, 100);
+      var item = document.createElement("div");
+      item.className = "merchant-item";
+      item.innerHTML =
+        '<div class="merchant-info">' +
+          '<span class="merchant-name">' + m.name + '</span>' +
+          '<span class="merchant-total">' + fmt(m.total) + '</span>' +
+        '</div>' +
+        '<div class="merchant-bar-track">' +
+          '<div class="merchant-bar-fill" style="width: ' + pct + '%"></div>' +
+        '</div>';
+      merchantList.appendChild(item);
+    });
+  }
+
+  // Filter & Render Transactions
+  function filterAndRenderTransactions(filterQuery) {
+    txList.innerHTML = "";
+    var query = (filterQuery || "").toLowerCase().trim();
+
+    var filtered = rawTransactions.filter(function (tx) {
+      if (!query) return true;
+      var desc = (tx.description || "").toLowerCase();
+      var raw = (tx.raw_description || "").toLowerCase();
+      var date = (tx.date || "").toLowerCase();
+      return desc.includes(query) || raw.includes(query) || date.includes(query);
+    });
+
+    txTotalBadge.textContent = filtered.length + (filtered.length === 1 ? " transação" : " transações");
+
+    if (filtered.length === 0) {
+      txList.innerHTML =
+        '<div class="tx-empty-state">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px; height:36px;"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>' +
+          '<span>Nenhum movimento encontrado.</span>' +
+        '</div>';
+      return;
+    }
+
+    filtered.forEach(function (tx) {
+      var isIncome = tx.amount > 0;
+      var amtStr = (isIncome ? "+" : "") + fmt(tx.amount);
+      var typeClass = isIncome ? "is-income" : "is-expense";
+
+      var iconHtml = isIncome
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px;height:16px;"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px;height:16px;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>';
+
+      var balStr = (tx.balance !== null && tx.balance !== undefined) ? ("Saldo: " + fmt(tx.balance)) : "";
+
+      var row = document.createElement("div");
+      row.className = "tx-item";
+      row.innerHTML =
+        '<div class="tx-left">' +
+          '<div class="tx-avatar ' + typeClass + '">' + iconHtml + '</div>' +
+          '<div class="tx-details">' +
+            '<span class="tx-title" title="' + (tx.raw_description || tx.description) + '">' + tx.description + '</span>' +
+            '<div class="tx-meta">' +
+              '<span>' + tx.date + '</span>' +
+              (tx.raw_description && tx.raw_description.includes("BRAGA") ? '<span class="tx-meta-badge">Braga</span>' : '') +
+              (tx.raw_description && tx.raw_description.includes("LISBOA") ? '<span class="tx-meta-badge">Lisboa</span>' : '') +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="tx-right">' +
+          '<span class="tx-amount ' + typeClass + '">' + amtStr + '</span>' +
+          (balStr ? '<span class="tx-running-balance">' + balStr + '</span>' : '') +
+        '</div>';
+
+      txList.appendChild(row);
+    });
+  }
+
+  // Live Search listener
+  if (txSearchInput) {
+    txSearchInput.addEventListener("input", function (e) {
+      filterAndRenderTransactions(e.target.value);
+    });
+  }
+
+  // Fetch Data Routine
+  function fetchData() {
     fetch("/api/balance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     })
       .then(function (res) {
-        if (!res.ok) throw new Error("API error " + res.status);
+        if (!res.ok) throw new Error("API error");
         return res.json();
       })
       .then(function (data) {
         if (data.success) {
-          renderBalance(data.balance, data.transactions, data.updated_at);
-          if (data.cached && data.warning) {
-            showError(data.warning);
-          }
+          renderDashboard(data.balance, data.transactions, data.updated_at);
+          if (data.cached && data.warning) showError(data.warning);
         }
       })
       .catch(function () {
-        // 2. Fallback to static data.json
+        // Fallback to static data.json
         fetch("./data.json?cb=" + Date.now())
-          .then(function (res) {
-            if (!res.ok) throw new Error("No data");
-            return res.json();
-          })
+          .then(function (res) { return res.json(); })
           .then(function (data) {
             if (data.balance && data.transactions) {
-              renderBalance(data.balance, data.transactions, data.updated_at);
+              renderDashboard(data.balance, data.transactions, data.updated_at);
             }
           })
           .catch(function () {
-            showError("Não foi possível carregar os dados. A tentar novamente...");
-            // Set live indicator to offline
-            if (liveIndicator) {
-              liveIndicator.querySelector(".live-dot").style.background = "#ff6b6b";
-              liveIndicator.querySelector(".live-dot").style.boxShadow = "0 0 10px rgba(255, 107, 107, 0.6)";
-              liveIndicator.querySelector(".live-label").textContent = "Offline";
-              liveIndicator.querySelector(".live-label").style.color = "#ff6b6b";
-              liveIndicator.style.background = "rgba(255, 107, 107, 0.08)";
-              liveIndicator.style.borderColor = "rgba(255, 107, 107, 0.15)";
-            }
+            showError("Sem ligação aos dados em tempo real. A tentar reconectar...");
           });
       });
   }
 
-  /* ---- Render Balance ---- */
-  function renderBalance(b, txs, updatedAt) {
-    // Reconcile effective lunch pass balance
-    var lunchVal = b.lunch_pass || 0;
-    if (txs && txs.length > 0) {
-      var latest = txs[0];
-      if (latest.balance !== null && latest.balance !== undefined) {
-        lunchVal = Number(latest.balance);
-      }
-    }
-
-    // Update timestamp
-    if (updatedAt) {
-      heroUpdated.textContent = formatTimestamp(updatedAt);
-    } else {
-      heroUpdated.textContent = formatTimestamp(new Date().toISOString());
-    }
-
-    // Animate the balance amount
-    if (!hasRendered) {
-      countUp(heroAmount, lunchVal);
-      hasRendered = true;
-    } else {
-      heroAmount.textContent = fmt(lunchVal);
-    }
-
-    // Animate the progress bar
-    var barPct = Math.min((lunchVal / MAX_BALANCE) * 100, 100);
-    setTimeout(function () {
-      heroBarFill.style.width = barPct + "%";
-    }, 200);
-
-    // Hide shimmer after first load
-    if (heroShimmer) {
-      setTimeout(function () {
-        heroShimmer.style.display = "none";
-      }, 2000);
-    }
-
-    // Stats
-    computeStats(txs || []);
-
-    // Transactions
-    renderTransactions(txs || []);
-
-    // Reset live indicator to active
-    if (liveIndicator) {
-      liveIndicator.querySelector(".live-dot").style.background = "";
-      liveIndicator.querySelector(".live-dot").style.boxShadow = "";
-      liveIndicator.querySelector(".live-label").textContent = "Em tempo real";
-      liveIndicator.querySelector(".live-label").style.color = "";
-      liveIndicator.style.background = "";
-      liveIndicator.style.borderColor = "";
-    }
-  }
-
-  /* ---- Compute Stats ---- */
-  function computeStats(txs) {
-    // Last spend (most recent negative transaction)
-    var lastSpend = null;
-    for (var i = 0; i < txs.length; i++) {
-      if (txs[i].amount < 0) {
-        lastSpend = txs[i];
-        break;
-      }
-    }
-    if (lastSpend) {
-      statLastSpend.textContent = fmt(Math.abs(lastSpend.amount));
-    } else {
-      statLastSpend.textContent = "—";
-    }
-
-    // Transaction count
-    statTxCount.textContent = txs.length;
-
-    // Daily average spend (only negatives)
-    var totalSpend = 0;
-    var spendCount = 0;
-    var dates = {};
-    for (var j = 0; j < txs.length; j++) {
-      if (txs[j].amount < 0) {
-        totalSpend += Math.abs(txs[j].amount);
-        spendCount++;
-        // Count unique dates
-        var txDate = txs[j].date ? txs[j].date.split(" ")[0] : "";
-        if (txDate) dates[txDate] = true;
-      }
-    }
-    var uniqueDays = Object.keys(dates).length || 1;
-    if (spendCount > 0) {
-      statDailyAvg.textContent = fmt(totalSpend / uniqueDays);
-    } else {
-      statDailyAvg.textContent = "—";
-    }
-  }
-
-  /* ---- Render Transactions ---- */
-  function renderTransactions(txs) {
-    txList.innerHTML = "";
-
-    if (txs.length === 0) {
-      txCount.textContent = "0";
-      txList.innerHTML = '<div class="tx-empty"><div class="tx-empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><p>Nenhum movimento recente encontrado.</p></div>';
-      return;
-    }
-
-    txCount.textContent = txs.length;
-
-    txs.forEach(function (tx, idx) {
-      var isPositive = tx.amount > 0;
-      var amtStr = (isPositive ? "+" : "") + fmt(tx.amount);
-      var amtClass = isPositive ? "positive" : "negative";
-
-      var iconHtml = isPositive
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>';
-
-      var iconClass = isPositive ? "tx-icon-positive" : "tx-icon-negative";
-      var balStr = (tx.balance !== null && tx.balance !== undefined)
-        ? fmt(tx.balance)
-        : "";
-
-      var item = document.createElement("div");
-      item.className = "tx-item";
-      item.style.animation = "fadeIn 0.3s var(--ease) " + (idx * 0.04) + "s both";
-      item.innerHTML =
-        '<div class="tx-left-side">' +
-          '<div class="tx-icon-box ' + iconClass + '">' + iconHtml + '</div>' +
-          '<div class="tx-info">' +
-            '<p class="tx-desc">' + tx.description + '</p>' +
-            '<p class="tx-date">' + tx.date + '</p>' +
-          '</div>' +
-        '</div>' +
-        '<div class="tx-right-side">' +
-          '<span class="tx-amount ' + amtClass + '">' + amtStr + '</span>' +
-          (balStr ? '<span class="tx-balance-after">Saldo: ' + balStr + '</span>' : '') +
-        '</div>';
-
-      txList.appendChild(item);
-    });
-  }
-
-  /* ---- Auto-refresh polling ---- */
+  // Polling for 24/7 background monitor updates
   function startPolling() {
-    // Poll notification status for changes
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(function () {
-      // Try server status endpoint for live updates
       fetch("/api/notifications/status")
-        .then(function (r) {
-          if (!r.ok) throw new Error("No backend");
-          return r.json();
-        })
-        .then(function (data) {
-          if (data.last_check && lastKnownCheck !== data.last_check) {
-            lastKnownCheck = data.last_check;
-            // New data available, refresh
-            loadData();
-          } else if (!lastKnownCheck && data.last_check) {
-            lastKnownCheck = data.last_check;
+        .then(function (r) { return r.json(); })
+        .then(function (status) {
+          if (status.last_check && status.last_check !== lastKnownCheck) {
+            lastKnownCheck = status.last_check;
+            fetchData();
           }
         })
-        .catch(function () {
-          // Static mode: just poll data.json for changes
-          fetch("./data.json?cb=" + Date.now())
-            .then(function (r) { return r.json(); })
-            .then(function (d) {
-              if (d.updated_at && d.updated_at !== lastKnownCheck) {
-                lastKnownCheck = d.updated_at;
-                if (d.balance && d.transactions) {
-                  renderBalance(d.balance, d.transactions, d.updated_at);
-                }
-              }
-            })
-            .catch(function () {});
-        });
-    }, 10000); // every 10 seconds
+        .catch(function () {});
+    }, 10000);
   }
 
-  /* ---- Init ---- */
-  loadData();
+  // Startup
+  fetchData();
   startPolling();
 
 })();
