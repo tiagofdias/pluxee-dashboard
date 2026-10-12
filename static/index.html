@@ -3,199 +3,277 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pluxee — Saldo e Métricas em Tempo Real</title>
-  <meta name="description" content="Dashboard financeiro em tempo real do cartão Pluxee Lunch Pass com análise de gastos e estimativas." />
+  <title>Pluxee — Dashboard Analítico & Previsão Salarial</title>
+  <meta name="description" content="Dashboard analítico em tempo real do cartão Pluxee Lunch Pass com inteligência de carregamento Capgemini e histórico financeiro completo." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- Ambient background effects -->
+  <!-- Ambient Glow Effects -->
   <div class="noise-overlay"></div>
   <div class="orb orb-1"></div>
   <div class="orb orb-2"></div>
   <div class="orb orb-3"></div>
 
-  <div class="dashboard-wrapper">
+  <div class="dashboard-container">
 
-    <!-- ====== TOP NAVIGATION ====== -->
-    <header class="navbar" id="navbar">
-      <div class="nav-brand">
+    <!-- ====== HEADER ====== -->
+    <header class="app-header">
+      <div class="header-brand-wrap">
         <div class="brand-glyph">
           <span class="glyph-core"></span>
-          <span class="glyph-pulse"></span>
         </div>
-        <div class="brand-text">
-          <span class="brand-title">Pluxee</span>
-          <span class="brand-sub">Lunch Pass Analytics</span>
+        <div class="brand-titles">
+          <div class="brand-title-row">
+            <h1 class="brand-title">Pluxee</h1>
+            <span class="brand-badge-company">Capgemini Portugal</span>
+          </div>
+          <p class="brand-sub">Lunch Pass Analytics · Lógica Salarial 9,63 €/dia útil</p>
         </div>
       </div>
 
-      <div class="nav-meta">
-        <div class="live-pill" id="live-indicator">
+      <div class="header-actions">
+        <div class="live-status-pill" id="live-indicator">
           <span class="live-dot"></span>
-          <span class="live-text">24/7 Tempo Real</span>
+          <span class="live-label">24/7 Tempo Real</span>
         </div>
-        <span class="sync-time" id="sync-time">A sincronizar...</span>
+        <div class="sync-indicator">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sync-icon"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span id="sync-time">A sincronizar...</span>
+        </div>
       </div>
     </header>
 
-    <!-- ====== KPI SUMMARY ROW (4 CARDS) ====== -->
-    <section class="kpi-grid">
+    <!-- ====== KPI SUMMARY ROW (5 FLUID CARDS) ====== -->
+    <section class="kpi-banner">
       
-      <!-- Primary Balance Card -->
-      <div class="kpi-card kpi-balance-highlight">
-        <div class="kpi-header">
-          <span class="kpi-label">Saldo Disponível</span>
-          <span class="badge-lunch">Lunch Pass</span>
+      <!-- 1. Saldo Disponível -->
+      <div class="kpi-card kpi-balance-card">
+        <div class="kpi-head">
+          <span class="kpi-title">Saldo Disponível</span>
+          <span class="kpi-tag lunch-tag">Lunch Pass</span>
         </div>
-        <div class="kpi-main-val">
-          <span class="hero-amount" id="hero-amount">€0,00</span>
+        <div class="kpi-body">
+          <span class="kpi-main-number" id="hero-amount">€0,00</span>
         </div>
-        <div class="kpi-footer">
-          <div class="balance-bar-wrap">
-            <div class="balance-bar-fill" id="balance-bar-fill"></div>
+        <div class="kpi-foot">
+          <div class="progress-track">
+            <div class="progress-fill" id="balance-bar-fill"></div>
           </div>
-          <div class="balance-bar-meta">
+          <div class="progress-meta">
             <span id="balance-bar-pct">0% restante</span>
-            <span id="balance-reload-ref">Base: €211,86</span>
+            <span id="balance-base-info">Base ciclo: €211,86</span>
           </div>
         </div>
       </div>
 
-      <!-- Monthly Spend Card -->
+      <!-- 2. Gasto no Mês Atual -->
       <div class="kpi-card">
-        <div class="kpi-header">
-          <span class="kpi-label">Gasto no Mês Atual</span>
-          <div class="kpi-icon icon-warn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+        <div class="kpi-head">
+          <span class="kpi-title">Gasto em Outubro</span>
+          <div class="kpi-icon icon-danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
           </div>
         </div>
-        <div class="kpi-main-val">
-          <span class="kpi-number" id="stat-month-spend">€0,00</span>
+        <div class="kpi-body">
+          <span class="kpi-main-number" id="stat-month-spend">€0,00</span>
         </div>
-        <div class="kpi-footer">
-          <span class="kpi-subtext" id="stat-month-tx-count">0 despesas em Outubro</span>
+        <div class="kpi-foot">
+          <span class="kpi-note" id="stat-month-tx-count">0 despesas registadas</span>
         </div>
       </div>
 
-      <!-- Daily Budget Runway Card -->
+      <!-- 3. Plafond Diário Recomendado -->
       <div class="kpi-card">
-        <div class="kpi-header">
-          <span class="kpi-label">Plafond Diário Recomendado</span>
+        <div class="kpi-head">
+          <span class="kpi-title">Orçamento Restante</span>
           <div class="kpi-icon icon-info">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           </div>
         </div>
-        <div class="kpi-main-val">
-          <span class="kpi-number" id="stat-daily-budget">€0,00</span>
+        <div class="kpi-body">
+          <span class="kpi-main-number" id="stat-daily-budget">€0,00</span>
           <span class="kpi-unit">/ dia</span>
         </div>
-        <div class="kpi-footer">
-          <span class="kpi-subtext" id="stat-days-left">até ao próximo carregamento</span>
+        <div class="kpi-foot">
+          <span class="kpi-note" id="stat-days-left">até ao próximo carregamento</span>
         </div>
       </div>
 
-      <!-- Last Reload Card -->
+      <!-- 4. Próxima Recarga Prevista (Inteligência Capgemini) -->
+      <div class="kpi-card kpi-highlight-payroll">
+        <div class="kpi-head">
+          <span class="kpi-title">Próxima Recarga</span>
+          <span class="kpi-tag payroll-tag">Previsão</span>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-main-number text-success" id="stat-next-reload-amount">~€211,86</span>
+        </div>
+        <div class="kpi-foot">
+          <span class="kpi-note" id="stat-next-reload-date">Previsto: 23 de Outubro (22 dias úteis)</span>
+        </div>
+      </div>
+
+      <!-- 5. Poupança Média Residual -->
       <div class="kpi-card">
-        <div class="kpi-header">
-          <span class="kpi-label">Último Carregamento</span>
+        <div class="kpi-head">
+          <span class="kpi-title">Sobra Média / Mês</span>
           <div class="kpi-icon icon-success">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
           </div>
         </div>
-        <div class="kpi-main-val">
-          <span class="kpi-number text-success" id="stat-last-reload">€0,00</span>
+        <div class="kpi-body">
+          <span class="kpi-main-number text-indigo" id="stat-avg-savings">€43,64</span>
         </div>
-        <div class="kpi-footer">
-          <span class="kpi-subtext" id="stat-last-reload-date">—</span>
+        <div class="kpi-foot">
+          <span class="kpi-note">Saldo médio antes de recarga</span>
         </div>
       </div>
 
     </section>
 
-    <!-- ====== 2-COLUMN MAIN CONTENT (TRANSACTIONS + ANALYTICS) ====== -->
-    <div class="dashboard-body-grid">
+    <!-- ====== MAIN ANALYTICS & TRANSACTIONS GRID ====== -->
+    <div class="main-dashboard-grid">
 
-      <!-- LEFT: RECENT TRANSACTIONS (EXPANDED & ELEGANT) -->
-      <section class="panel tx-panel">
-        <div class="panel-header">
-          <div class="panel-title-group">
-            <h2 class="panel-title">Movimentos Recentes</h2>
-            <span class="panel-badge" id="tx-total-badge">0 transações</span>
-          </div>
-          <div class="panel-actions">
-            <div class="search-input-wrap">
-              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="tx-search-input" placeholder="Filtrar movimentos..." />
-            </div>
-          </div>
-        </div>
+      <!-- LEFT COLUMN: GRÁFICOS & INTELIGÊNCIA DE CARREGAMENTO -->
+      <div class="analytics-column">
 
-        <div class="tx-list-container" id="tx-list">
-          <div class="tx-loading-state">
-            <div class="spinner-ring"></div>
-            <span>A carregar movimentos...</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- RIGHT: INSIGHTS & MERCHANT BREAKDOWN -->
-      <aside class="panel-column-right">
-
-        <!-- Top Merchants / Spend Distribution -->
-        <section class="panel merchant-panel">
+        <!-- 1. PAINEL DE INTELIGÊNCIA SALARIAL CAPGEMINI -->
+        <section class="card-panel payroll-intel-panel">
           <div class="panel-header">
-            <div class="panel-title-group">
-              <h3 class="panel-title">Onde Mais Gastas</h3>
-              <span class="panel-sub">Top estabelecimentos</span>
+            <div class="panel-header-left">
+              <div class="panel-icon-circle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+              </div>
+              <div>
+                <h2 class="panel-title">Lógica de Carregamento Capgemini</h2>
+                <p class="panel-desc">Análise algorítmica do subsídio e dias úteis</p>
+              </div>
             </div>
+            <span class="pill-rate">9,63 € / dia útil</span>
           </div>
-          <div class="merchant-list" id="merchant-list">
-            <!-- Dynamically populated -->
-          </div>
-        </section>
 
-        <!-- Quick Financial Metrics / Card Info -->
-        <section class="panel card-details-panel">
-          <div class="panel-header">
-            <div class="panel-title-group">
-              <h3 class="panel-title">Resumo do Mês</h3>
+          <div class="payroll-intel-body">
+            <!-- 3 Mini Stats -->
+            <div class="payroll-meta-grid">
+              <div class="payroll-meta-box">
+                <span class="p-meta-label">Regra de Cálculo</span>
+                <span class="p-meta-val">Dias Úteis × 9,63 €</span>
+                <span class="p-meta-sub">Isenção máxima IRS/TSU</span>
+              </div>
+              <div class="payroll-meta-box">
+                <span class="p-meta-label">Janela de Pagamento</span>
+                <span class="p-meta-val">Dias 24 a 28</span>
+                <span class="p-meta-sub">Penúltimo dia útil da semana</span>
+              </div>
+              <div class="payroll-meta-box">
+                <span class="p-meta-label">Último Carregamento</span>
+                <span class="p-meta-val text-success" id="intel-last-reload-val">+€211,86</span>
+                <span class="p-meta-sub" id="intel-last-reload-date">24 Setembro (22 dias)</span>
+              </div>
             </div>
-          </div>
-          <div class="metrics-list">
-            <div class="metric-row">
-              <span class="metric-key">Gasto Médio por Compra</span>
-              <span class="metric-val" id="metric-avg-tx">—</span>
-            </div>
-            <div class="metric-row">
-              <span class="metric-key">Maior Despesa do Mês</span>
-              <span class="metric-val" id="metric-biggest-spend">—</span>
-            </div>
-            <div class="metric-row">
-              <span class="metric-key">Dias com Movimentos</span>
-              <span class="metric-val" id="metric-active-days">—</span>
-            </div>
-            <div class="metric-row">
-              <span class="metric-key">Data Prevista Recarga</span>
-              <span class="metric-val" id="metric-next-reload">~24 deste mês</span>
+
+            <!-- Tabela Compacta de Histórico de Recargas -->
+            <div class="reloads-history-wrap">
+              <span class="section-micro-title">Histórico de Recargas Verificado</span>
+              <div class="reloads-chips-row" id="reloads-chips-container">
+                <!-- Populado dinamicamente -->
+              </div>
             </div>
           </div>
         </section>
 
-      </aside>
+        <!-- 2. GRÁFICO COMPARATIVO MENSAL (CARREGAMENTOS VS GASTOS) -->
+        <section class="card-panel chart-panel">
+          <div class="panel-header">
+            <div class="panel-header-left">
+              <div class="panel-icon-circle icon-chart">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              </div>
+              <div>
+                <h2 class="panel-title">Evolução Mensal: Subsídio vs Gastos</h2>
+                <p class="panel-desc">Histórico de carregamentos recebidos vs compras efetuadas</p>
+              </div>
+            </div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </section>
+
+        <!-- 3. DISTRIBUIÇÃO POR CATEGORIA / ONDE MAIS GASTAS -->
+        <section class="card-panel breakdown-panel">
+          <div class="panel-header">
+            <div class="panel-header-left">
+              <div class="panel-icon-circle icon-pie">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+              </div>
+              <div>
+                <h2 class="panel-title">Distribuição de Gastos</h2>
+                <p class="panel-desc">Destino do orçamento alimentar acumulado</p>
+              </div>
+            </div>
+          </div>
+          <div class="breakdown-grid">
+            <div class="breakdown-chart-wrap">
+              <canvas id="categoryDonutChart"></canvas>
+            </div>
+            <div class="merchants-bars-list" id="merchants-bars-list">
+              <!-- Populado dinamicamente -->
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- RIGHT COLUMN: FEED COMPLETO DE MOVIMENTOS COM PESQUISA & FILTROS -->
+      <div class="feed-column">
+        <section class="card-panel tx-feed-panel">
+          
+          <div class="feed-header">
+            <div class="feed-header-top">
+              <div class="feed-title-wrap">
+                <h2 class="panel-title">Movimentos & Histórico</h2>
+                <span class="badge-tx-total" id="tx-badge-count">57 transações</span>
+              </div>
+              <div class="feed-search-wrap">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="feed-search-icon"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="tx-search" placeholder="Procurar por loja, local ou data..." />
+              </div>
+            </div>
+
+            <!-- Filtros Rápidos -->
+            <div class="filter-chips-row">
+              <button class="filter-chip active" data-filter="all">Todos</button>
+              <button class="filter-chip" data-filter="expenses">Apenas Gastos</button>
+              <button class="filter-chip" data-filter="reloads">Carregamentos</button>
+              <button class="filter-chip" data-filter="glovo">Glovo</button>
+              <button class="filter-chip" data-filter="super">Supermercados</button>
+            </div>
+          </div>
+
+          <!-- Lista de Transações com Scroll Responsivo -->
+          <div class="feed-list" id="tx-feed-list">
+            <div class="feed-loading">
+              <div class="spinner"></div>
+              <span>A carregar livro-razão completo...</span>
+            </div>
+          </div>
+
+        </section>
+      </div>
 
     </div>
 
     <!-- Error Toast -->
     <div id="error-toast" class="error-toast hidden">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
-      </svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
       <span id="error-text"></span>
-      <button class="error-dismiss" id="error-dismiss">×</button>
+      <button id="error-dismiss" class="toast-dismiss">×</button>
     </div>
 
   </div>

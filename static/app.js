@@ -1,44 +1,56 @@
 /**
- * Pluxee Dashboard — Full-Width Financial Analytics v3
- * Real-time monitoring, monthly metrics, spend breakdown & interactive search.
+ * Pluxee Dashboard & Capgemini Payroll Analytics v4
+ * Real-time monitoring, algorithmic payroll prediction (9,63 €/dia),
+ * interactive Chart.js visualizations & responsive transaction feed.
  */
 (function () {
   "use strict";
 
-  // Elements
+  // Elements Helper
   var $ = function (id) { return document.getElementById(id); };
 
-  var heroAmount         = $("hero-amount");
-  var balanceBarFill     = $("balance-bar-fill");
-  var balanceBarPct      = $("balance-bar-pct");
-  var balanceReloadRef   = $("balance-reload-ref");
+  // DOM Elements
+  var heroAmount             = $("hero-amount");
+  var balanceBarFill         = $("balance-bar-fill");
+  var balanceBarPct          = $("balance-bar-pct");
+  var balanceBaseInfo        = $("balance-base-info");
 
-  var statMonthSpend     = $("stat-month-spend");
-  var statMonthTxCount   = $("stat-month-tx-count");
-  var statDailyBudget    = $("stat-daily-budget");
-  var statDaysLeft       = $("stat-days-left");
-  var statLastReload     = $("stat-last-reload");
-  var statLastReloadDate = $("stat-last-reload-date");
+  var statMonthSpend         = $("stat-month-spend");
+  var statMonthTxCount       = $("stat-month-tx-count");
+  var statDailyBudget        = $("stat-daily-budget");
+  var statDaysLeft           = $("stat-days-left");
+  var statNextReloadAmount   = $("stat-next-reload-amount");
+  var statNextReloadDate     = $("stat-next-reload-date");
+  var statAvgSavings         = $("stat-avg-savings");
 
-  var txTotalBadge       = $("tx-total-badge");
-  var txList             = $("tx-list");
-  var txSearchInput      = $("tx-search-input");
-  var merchantList       = $("merchant-list");
+  var intelLastReloadVal     = $("intel-last-reload-val");
+  var intelLastReloadDate    = $("intel-last-reload-date");
+  var reloadsChipsContainer  = $("reloads-chips-container");
+  var merchantsBarsList      = $("merchants-bars-list");
 
-  var metricAvgTx        = $("metric-avg-tx");
-  var metricBiggestSpend = $("metric-biggest-spend");
-  var metricActiveDays   = $("metric-active-days");
-  var metricNextReload   = $("metric-next-reload");
+  var txBadgeCount           = $("tx-badge-count");
+  var txFeedList             = $("tx-feed-list");
+  var txSearchInput          = $("tx-search");
+  var filterChips            = document.querySelectorAll(".filter-chip");
 
-  var syncTime           = $("sync-time");
-  var liveIndicator      = $("live-indicator");
-  var errorToast         = $("error-toast");
-  var errorText          = $("error-text");
-  var errorDismiss       = $("error-dismiss");
+  var syncTime               = $("sync-time");
+  var liveIndicator          = $("live-indicator");
+  var errorToast             = $("error-toast");
+  var errorText              = $("error-text");
+  var errorDismiss           = $("error-dismiss");
 
-  var rawTransactions    = [];
-  var lastKnownCheck     = null;
-  var pollTimer          = null;
+  // Chart instances
+  var monthlyChartInstance   = null;
+  var categoryChartInstance  = null;
+
+  // State
+  var rawTransactions        = [];
+  var activeFilter           = "all";
+  var searchQuery            = "";
+  var lastKnownCheck         = null;
+  var pollTimer              = null;
+
+  var DAILY_RATE             = 9.63; // Verified Capgemini meal subsidy rate per business day
 
   // Currency Formatter
   function fmt(val) {
@@ -48,9 +60,10 @@
     }).format(val || 0);
   }
 
-  // Count up animation
+  // Smooth Number Count Up
   function countUp(el, to, ms) {
-    ms = ms || 1000;
+    if (!el) return;
+    ms = ms || 900;
     var t0 = performance.now();
     (function tick(now) {
       var p = Math.min((now - t0) / ms, 1);
@@ -71,39 +84,54 @@
     });
   }
 
-  // Parse Portuguese Date: DD/MM/YYYY
-  function parseDate(dStr) {
-    if (!dStr) return new Date();
-    var parts = dStr.split(" ")[0].split("/");
+  // Parse Portuguese Date (DD/MM/YYYY)
+  function parseTxDate(dateStr) {
+    if (!dateStr) return new Date();
+    var parts = dateStr.split(" ")[0].split("/");
     if (parts.length === 3) {
       return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
     }
-    return new Date(dStr);
+    return new Date(dateStr);
   }
 
-  // Clean Merchant Name
-  function cleanMerchantName(desc) {
-    if (!desc) return "Outros";
-    var d = desc.trim();
-    if (d.startsWith("Glovo")) return "Glovo";
-    if (d.includes("PINGO DOCE")) return "Pingo Doce";
-    if (d.includes("MCDONALDS")) return "McDonald's";
-    if (d.includes("Carregamento")) return "Carregamento Empresa";
-    // Return first 2-3 words capitalized
-    return d.split(" ").slice(0, 3).join(" ");
+  // Merchant Normalization
+  function getMerchantCategory(desc) {
+    var d = (desc || "").toLowerCase();
+    if (d.includes("glovo")) return { name: "Glovo (Delivery)", group: "glovo" };
+    if (d.includes("continente") || d.includes("pingo doce") || d.includes("supermercado")) {
+      return { name: "Supermercados", group: "super" };
+    }
+    if (d.includes("carregamento")) return { name: "Carregamento Capgemini", group: "reload" };
+    return { name: "Restauração & Cafés", group: "dining" };
   }
 
-  // Main Render Function
+  // Calculate Business Days in a given month/year
+  function countBusinessDays(year, month) {
+    var count = 0;
+    var date = new Date(year, month, 1);
+    while (date.getMonth() === month) {
+      var day = date.getDay();
+      if (day !== 0 && day !== 6) { // Monday to Friday
+        count++;
+      }
+      date.setDate(date.getDate() + 1);
+    }
+    return count;
+  }
+
+  // ================================================================
+  // MAIN DASHBOARD COMPUTATION & RENDER
+  // ================================================================
   function renderDashboard(balanceData, txs, updatedAt) {
     rawTransactions = txs || [];
 
-    // Reconcile effective lunch pass balance
-    var lunchBalance = balanceData.lunch_pass || 0;
+    // 1. Effective Balance Reconciliation
+    var currentBalance = balanceData.lunch_pass || 0;
     if (rawTransactions.length > 0 && rawTransactions[0].balance !== null && rawTransactions[0].balance !== undefined) {
-      lunchBalance = Number(rawTransactions[0].balance);
+      currentBalance = Number(rawTransactions[0].balance);
     }
 
-    // 1. Sync timestamp
+    // Update timestamp
     if (updatedAt) {
       var d = new Date(updatedAt);
       syncTime.textContent = "Sincronizado às " + d.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
@@ -111,155 +139,376 @@
       syncTime.textContent = "Atualizado agora";
     }
 
-    // 2. Find last reload (income > 50€)
-    var lastReloadTx = null;
+    // 2. Identify All Capgemini Reloads
+    var reloads = [];
+    var prevSavingsList = [];
+
     for (var i = 0; i < rawTransactions.length; i++) {
-      if (rawTransactions[i].amount > 50) {
-        lastReloadTx = rawTransactions[i];
-        break;
+      var tx = rawTransactions[i];
+      if (tx.amount > 50 && (tx.description.includes("Carregamento") || tx.amount > 150)) {
+        var deducedDays = Math.round(tx.amount / DAILY_RATE);
+        reloads.push({
+          tx: tx,
+          amount: tx.amount,
+          date: tx.date,
+          days: deducedDays,
+        });
+
+        // The balance immediately prior to this reload
+        if (i + 1 < rawTransactions.length) {
+          var priorTx = rawTransactions[i + 1];
+          if (priorTx.balance !== null && priorTx.balance !== undefined) {
+            prevSavingsList.push(Number(priorTx.balance));
+          }
+        }
       }
     }
-    var reloadBase = lastReloadTx ? lastReloadTx.amount : 211.86;
-    if (lastReloadTx) {
-      statLastReload.textContent = "+" + fmt(lastReloadTx.amount);
-      statLastReloadDate.textContent = lastReloadTx.description + " · " + lastReloadTx.date;
-    } else {
-      statLastReload.textContent = "—";
-      statLastReloadDate.textContent = "Sem registo recente";
-    }
 
-    // 3. Render Available Balance & Progress Bar
-    countUp(heroAmount, lunchBalance);
-    var remainingPct = Math.min(Math.max((lunchBalance / reloadBase) * 100, 0), 100);
+    // Sort reloads chronologically
+    reloads.sort(function (a, b) {
+      return parseTxDate(b.date) - parseTxDate(a.date);
+    });
+
+    var latestReload = reloads.length > 0 ? reloads[0] : null;
+    var reloadBase = latestReload ? latestReload.amount : 211.86;
+
+    // 3. Render Balance Card & Progress Bar
+    countUp(heroAmount, currentBalance);
+    var remainingPct = Math.min(Math.max((currentBalance / reloadBase) * 100, 0), 100);
     setTimeout(function () {
       balanceBarFill.style.width = remainingPct.toFixed(1) + "%";
     }, 150);
     balanceBarPct.textContent = remainingPct.toFixed(0) + "% restante";
-    balanceReloadRef.textContent = "Base: " + fmt(reloadBase);
+    balanceBaseInfo.textContent = "Base ciclo: " + fmt(reloadBase);
 
-    // 4. Current Month Spend Analytics
-    // Determine the active month from the latest transaction or current date
+    // 4. Current Month Spending (Outubro 2026)
     var now = new Date();
-    var targetMonth = now.getMonth();
-    var targetYear = now.getFullYear();
-    if (rawTransactions.length > 0) {
-      var latestDate = parseDate(rawTransactions[0].date);
-      targetMonth = latestDate.getMonth();
-      targetYear = latestDate.getFullYear();
-    }
+    var currentMonth = now.getMonth();
+    var currentYear = now.getFullYear();
 
-    var monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-    var currentMonthName = monthNames[targetMonth];
-
-    var currentMonthExpenses = 0;
-    var currentMonthExpenseCount = 0;
-    var maxExpenseThisMonth = 0;
-    var activeDaysMap = {};
-    var merchantTotals = {};
+    var currentMonthSpend = 0;
+    var currentMonthCount = 0;
 
     rawTransactions.forEach(function (tx) {
       if (tx.amount < 0) {
-        var tDate = parseDate(tx.date);
-        var cost = Math.abs(tx.amount);
-
-        // Group by merchant across recent history
-        var mName = cleanMerchantName(tx.description);
-        merchantTotals[mName] = (merchantTotals[mName] || 0) + cost;
-
-        // Current month filter
-        if (tDate.getMonth() === targetMonth && tDate.getFullYear() === targetYear) {
-          currentMonthExpenses += cost;
-          currentMonthExpenseCount++;
-          if (cost > maxExpenseThisMonth) {
-            maxExpenseThisMonth = cost;
-          }
-          var dayKey = tDate.getDate();
-          activeDaysMap[dayKey] = true;
+        var td = parseTxDate(tx.date);
+        if (td.getMonth() === currentMonth && td.getFullYear() === currentYear) {
+          currentMonthSpend += Math.abs(tx.amount);
+          currentMonthCount++;
         }
       }
     });
 
-    statMonthSpend.textContent = fmt(currentMonthExpenses);
-    statMonthTxCount.textContent = currentMonthExpenseCount + " despesas em " + currentMonthName;
+    statMonthSpend.textContent = fmt(currentMonthSpend);
+    statMonthTxCount.textContent = currentMonthCount + " despesas registadas em Outubro";
 
-    // 5. Daily Runway Budget
-    // Company reloads are usually around the 24th
-    var reloadDayOfMonth = 24;
-    var todayDay = now.getDate();
-    var daysUntilReload = reloadDayOfMonth > todayDay ? (reloadDayOfMonth - todayDay) : (30 - todayDay + reloadDayOfMonth);
-    if (daysUntilReload <= 0) daysUntilReload = 1;
+    // 5. Capgemini Payroll Forecaster (Next Recharge)
+    // Rule: Reload happens on weekdays 23-28 before weekend
+    var targetReloadDate = new Date(currentYear, currentMonth, 23); // 23 Oct 2026 is Friday
+    var today = now.getDate();
+    var daysUntilReload = 23 - today;
+    if (daysUntilReload < 0) daysUntilReload = 1;
 
-    var dailyBudget = lunchBalance > 0 ? (lunchBalance / daysUntilReload) : 0;
-    statDailyBudget.textContent = fmt(dailyBudget);
-    statDaysLeft.textContent = daysUntilReload + " dias até à recarga (~dia " + reloadDayOfMonth + ")";
+    // Work days in current month (October has 22 weekdays)
+    var currentMonthWorkDays = countBusinessDays(currentYear, currentMonth);
+    var estimatedNextAmount = currentMonthWorkDays * DAILY_RATE; // ~211.86 €
 
-    // 6. Additional Card Metrics Panel
-    var avgTx = currentMonthExpenseCount > 0 ? (currentMonthExpenses / currentMonthExpenseCount) : 0;
-    metricAvgTx.textContent = fmt(avgTx);
-    metricBiggestSpend.textContent = maxExpenseThisMonth > 0 ? fmt(maxExpenseThisMonth) : "—";
-    var activeDaysCount = Object.keys(activeDaysMap).length;
-    metricActiveDays.textContent = activeDaysCount + " dias";
-    metricNextReload.textContent = "~24 de " + currentMonthName;
+    statNextReloadAmount.textContent = "~" + fmt(estimatedNextAmount);
+    statNextReloadDate.textContent = "Previsto: 23 de Outubro (" + currentMonthWorkDays + " dias úteis)";
 
-    // 7. Render Top Merchants
-    renderTopMerchants(merchantTotals);
+    // Daily recommended runway budget
+    var dailyRunway = currentBalance > 0 ? (currentBalance / (daysUntilReload || 1)) : 0;
+    statDailyBudget.textContent = fmt(dailyRunway);
+    statDaysLeft.textContent = daysUntilReload + " dias até à recarga (~dia 23)";
 
-    // 8. Render Transactions List
-    filterAndRenderTransactions("");
+    // Average residual savings before reload
+    var avgSavings = prevSavingsList.length > 0
+      ? (prevSavingsList.reduce(function (a, b) { return a + b; }, 0) / prevSavingsList.length)
+      : currentBalance;
+    statAvgSavings.textContent = fmt(avgSavings);
+
+    // 6. Populate Capgemini Intelligence Panel
+    if (latestReload) {
+      intelLastReloadVal.textContent = "+" + fmt(latestReload.amount);
+      intelLastReloadDate.textContent = latestReload.date + " (" + latestReload.days + " dias)";
+    }
+
+    // Render Reload Chips
+    renderReloadChips(reloads);
+
+    // 7. Render Charts
+    renderMonthlyChart();
+    renderCategoryBreakdown();
+
+    // 8. Render Filtered Transactions
+    applyFiltersAndRenderFeed();
   }
 
-  // Render Top Merchants with Progress Bars
-  function renderTopMerchants(merchantTotals) {
-    merchantList.innerHTML = "";
-    var sorted = Object.keys(merchantTotals).map(function (k) {
-      return { name: k, total: merchantTotals[k] };
-    }).sort(function (a, b) {
-      return b.total - a.total;
-    }).slice(0, 5);
-
-    if (sorted.length === 0) {
-      merchantList.innerHTML = '<p style="color:var(--text-3); font-size:0.8rem;">Sem dados suficientes.</p>';
+  // ================================================================
+  // RENDER RELOAD CHIPS (PAYROLL INTELLIGENCE)
+  // ================================================================
+  function renderReloadChips(reloads) {
+    reloadsChipsContainer.innerHTML = "";
+    if (!reloads || reloads.length === 0) {
+      reloadsChipsContainer.innerHTML = '<span style="color:var(--text-3); font-size:0.75rem;">Sem recargas recentes.</span>';
       return;
     }
 
-    var highest = sorted[0].total || 1;
-
-    sorted.forEach(function (m) {
-      var pct = Math.min((m.total / highest) * 100, 100);
-      var item = document.createElement("div");
-      item.className = "merchant-item";
-      item.innerHTML =
-        '<div class="merchant-info">' +
-          '<span class="merchant-name">' + m.name + '</span>' +
-          '<span class="merchant-total">' + fmt(m.total) + '</span>' +
-        '</div>' +
-        '<div class="merchant-bar-track">' +
-          '<div class="merchant-bar-fill" style="width: ' + pct + '%"></div>' +
-        '</div>';
-      merchantList.appendChild(item);
+    reloads.forEach(function (r) {
+      var chip = document.createElement("div");
+      chip.className = "reload-pill-item";
+      chip.innerHTML =
+        '<span class="reload-pill-date">' + r.date + '</span>' +
+        '<span class="reload-pill-amount">+' + fmt(r.amount) + '</span>' +
+        '<span class="reload-pill-days">(' + r.days + ' dias úteis)</span>';
+      reloadsChipsContainer.appendChild(chip);
     });
   }
 
-  // Filter & Render Transactions
-  function filterAndRenderTransactions(filterQuery) {
-    txList.innerHTML = "";
-    var query = (filterQuery || "").toLowerCase().trim();
+  // ================================================================
+  // MONTHLY COMPARISON CHART (CHART.JS)
+  // ================================================================
+  function renderMonthlyChart() {
+    var canvas = $("monthlyChart");
+    if (!canvas) return;
 
-    var filtered = rawTransactions.filter(function (tx) {
-      if (!query) return true;
-      var desc = (tx.description || "").toLowerCase();
-      var raw = (tx.raw_description || "").toLowerCase();
-      var date = (tx.date || "").toLowerCase();
-      return desc.includes(query) || raw.includes(query) || date.includes(query);
+    // Group by Month (Abril a Outubro)
+    var monthMap = {};
+    var monthOrder = [];
+
+    rawTransactions.forEach(function (tx) {
+      var d = parseTxDate(tx.date);
+      var key = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      var label = d.toLocaleDateString("pt-PT", { month: "short" }) + " " + d.getFullYear();
+
+      if (!monthMap[key]) {
+        monthMap[key] = { label: label, reloads: 0, expenses: 0, sortDate: d };
+        monthOrder.push(key);
+      }
+
+      if (tx.amount > 0) {
+        monthMap[key].reloads += tx.amount;
+      } else {
+        monthMap[key].expenses += Math.abs(tx.amount);
+      }
     });
 
-    txTotalBadge.textContent = filtered.length + (filtered.length === 1 ? " transação" : " transações");
+    // Sort chronologically ascending
+    var sortedKeys = Object.keys(monthMap).sort();
+    var labels = sortedKeys.map(function (k) { return monthMap[k].label; });
+    var reloadsData = sortedKeys.map(function (k) { return Math.round(monthMap[k].reloads * 100) / 100; });
+    var expensesData = sortedKeys.map(function (k) { return Math.round(monthMap[k].expenses * 100) / 100; });
+
+    if (monthlyChartInstance) {
+      monthlyChartInstance.destroy();
+    }
+
+    var ctx = canvas.getContext("2d");
+    monthlyChartInstance = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: "Subsídio Capgemini (€)",
+            data: reloadsData,
+            backgroundColor: "rgba(46, 213, 115, 0.45)",
+            borderColor: "#2ed573",
+            borderWidth: 1.5,
+            borderRadius: 6,
+          },
+          {
+            label: "Gastos Efetuados (€)",
+            data: expensesData,
+            backgroundColor: "rgba(255, 159, 67, 0.45)",
+            borderColor: "#ff9f43",
+            borderWidth: 1.5,
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "top",
+            labels: {
+              color: "#9299b8",
+              font: { family: "Plus Jakarta Sans", size: 12, weight: 600 },
+              usePointStyle: true,
+              pointStyle: "circle",
+              padding: 16,
+            },
+          },
+          tooltip: {
+            backgroundColor: "rgba(16, 18, 28, 0.95)",
+            titleColor: "#ffffff",
+            bodyColor: "#f3f5fc",
+            borderColor: "rgba(255, 255, 255, 0.1)",
+            borderWidth: 1,
+            padding: 12,
+            boxPadding: 6,
+            callbacks: {
+              label: function (ctx) {
+                return " " + ctx.dataset.label + ": " + fmt(ctx.raw);
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: "rgba(255, 255, 255, 0.03)" },
+            ticks: { color: "#9299b8", font: { family: "Plus Jakarta Sans", size: 11 } },
+          },
+          y: {
+            grid: { color: "rgba(255, 255, 255, 0.04)" },
+            ticks: {
+              color: "#9299b8",
+              font: { family: "JetBrains Mono", size: 11 },
+              callback: function (val) { return val + " €"; },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ================================================================
+  // CATEGORY & MERCHANT BREAKDOWN (DONUT CHART & BARS)
+  // ================================================================
+  function renderCategoryBreakdown() {
+    var canvas = $("categoryDonutChart");
+    if (!canvas) return;
+
+    var categoryTotals = {
+      "Glovo (Delivery)": 0,
+      "Supermercados": 0,
+      "Restauração & Cafés": 0,
+    };
+
+    var merchantTotals = {};
+
+    rawTransactions.forEach(function (tx) {
+      if (tx.amount < 0) {
+        var cost = Math.abs(tx.amount);
+        var cat = getMerchantCategory(tx.description);
+        if (categoryTotals[cat.name] !== undefined) {
+          categoryTotals[cat.name] += cost;
+        } else {
+          categoryTotals["Restauração & Cafés"] += cost;
+        }
+
+        // Top merchant breakdown
+        var mKey = tx.description.startsWith("Glovo") ? "Glovo" : tx.description.split(" ").slice(0, 3).join(" ");
+        merchantTotals[mKey] = (merchantTotals[mKey] || 0) + cost;
+      }
+    });
+
+    // Donut Chart
+    if (categoryChartInstance) {
+      categoryChartInstance.destroy();
+    }
+
+    var ctx = canvas.getContext("2d");
+    categoryChartInstance = new Chart(ctx, {
+      type: "doughnut",
+      data: {
+        labels: Object.keys(categoryTotals),
+        datasets: [{
+          data: Object.values(categoryTotals),
+          backgroundColor: [
+            "rgba(255, 159, 67, 0.75)", // Glovo
+            "rgba(46, 213, 115, 0.75)",  // Supermercados
+            "rgba(112, 121, 255, 0.75)", // Restauração
+          ],
+          borderColor: "rgba(16, 18, 28, 0.8)",
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "rgba(16, 18, 28, 0.95)",
+            callbacks: {
+              label: function (ctx) {
+                return " " + ctx.label + ": " + fmt(ctx.raw);
+              },
+            },
+          },
+        },
+        cutout: "68%",
+      },
+    });
+
+    // Top Merchant Bars
+    merchantsBarsList.innerHTML = "";
+    var sortedMerchants = Object.keys(merchantTotals).map(function (k) {
+      return { name: k, total: merchantTotals[k] };
+    }).sort(function (a, b) {
+      return b.total - a.total;
+    }).slice(0, 4);
+
+    var maxM = sortedMerchants.length > 0 ? sortedMerchants[0].total : 1;
+
+    sortedMerchants.forEach(function (m) {
+      var pct = Math.min((m.total / maxM) * 100, 100);
+      var row = document.createElement("div");
+      row.className = "merchant-row";
+      row.innerHTML =
+        '<div class="merchant-row-info">' +
+          '<span class="m-name">' + m.name + '</span>' +
+          '<span class="m-amt">' + fmt(m.total) + '</span>' +
+        '</div>' +
+        '<div class="m-track">' +
+          '<div class="m-bar" style="width: ' + pct + '%"></div>' +
+        '</div>';
+      merchantsBarsList.appendChild(row);
+    });
+  }
+
+  // ================================================================
+  // FILTER & RENDER TRANSACTIONS FEED
+  // ================================================================
+  function applyFiltersAndRenderFeed() {
+    txFeedList.innerHTML = "";
+
+    var filtered = rawTransactions.filter(function (tx) {
+      // 1. Text Search Filter
+      if (searchQuery) {
+        var query = searchQuery.toLowerCase();
+        var d = (tx.description || "").toLowerCase();
+        var r = (tx.raw_description || "").toLowerCase();
+        var date = (tx.date || "").toLowerCase();
+        if (!d.includes(query) && !r.includes(query) && !date.includes(query)) {
+          return false;
+        }
+      }
+
+      // 2. Chip Filter
+      if (activeFilter === "expenses" && tx.amount >= 0) return false;
+      if (activeFilter === "reloads" && tx.amount <= 0) return false;
+      if (activeFilter === "glovo" && !tx.description.toLowerCase().includes("glovo")) return false;
+      if (activeFilter === "super") {
+        var dLower = tx.description.toLowerCase();
+        if (!dLower.includes("continente") && !dLower.includes("pingo doce") && !dLower.includes("supermercado")) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    txBadgeCount.textContent = filtered.length + (filtered.length === 1 ? " transação" : " transações");
 
     if (filtered.length === 0) {
-      txList.innerHTML =
-        '<div class="tx-empty-state">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px; height:36px;"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>' +
-          '<span>Nenhum movimento encontrado.</span>' +
+      txFeedList.innerHTML =
+        '<div class="feed-empty">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>' +
+          '<span>Nenhum movimento corresponde ao filtro selecionado.</span>' +
         '</div>';
       return;
     }
@@ -267,45 +516,63 @@
     filtered.forEach(function (tx) {
       var isIncome = tx.amount > 0;
       var amtStr = (isIncome ? "+" : "") + fmt(tx.amount);
-      var typeClass = isIncome ? "is-income" : "is-expense";
+      var typeClass = isIncome ? "income" : "expense";
 
-      var iconHtml = isIncome
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px;height:16px;"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:16px;height:16px;"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>';
+      var iconSvg = isIncome
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>';
 
       var balStr = (tx.balance !== null && tx.balance !== undefined) ? ("Saldo: " + fmt(tx.balance)) : "";
 
-      var row = document.createElement("div");
-      row.className = "tx-item";
-      row.innerHTML =
-        '<div class="tx-left">' +
-          '<div class="tx-avatar ' + typeClass + '">' + iconHtml + '</div>' +
-          '<div class="tx-details">' +
-            '<span class="tx-title" title="' + (tx.raw_description || tx.description) + '">' + tx.description + '</span>' +
-            '<div class="tx-meta">' +
+      // Location badge detection
+      var locBadge = "";
+      var rawD = (tx.raw_description || "").toUpperCase();
+      if (rawD.includes("BRAGA")) locBadge = '<span class="tx-tag-badge">Braga</span>';
+      else if (rawD.includes("LISBOA") || rawD.includes("LISB")) locBadge = '<span class="tx-tag-badge">Lisboa</span>';
+      else if (rawD.includes("GUIMARAES")) locBadge = '<span class="tx-tag-badge">Guimarães</span>';
+
+      var item = document.createElement("div");
+      item.className = "tx-feed-item";
+      item.innerHTML =
+        '<div class="tx-f-left">' +
+          '<div class="tx-f-icon ' + typeClass + '">' + iconSvg + '</div>' +
+          '<div class="tx-f-info">' +
+            '<span class="tx-f-desc" title="' + (tx.raw_description || tx.description) + '">' + tx.description + '</span>' +
+            '<div class="tx-f-meta-row">' +
               '<span>' + tx.date + '</span>' +
-              (tx.raw_description && tx.raw_description.includes("BRAGA") ? '<span class="tx-meta-badge">Braga</span>' : '') +
-              (tx.raw_description && tx.raw_description.includes("LISBOA") ? '<span class="tx-meta-badge">Lisboa</span>' : '') +
+              locBadge +
             '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="tx-right">' +
-          '<span class="tx-amount ' + typeClass + '">' + amtStr + '</span>' +
-          (balStr ? '<span class="tx-running-balance">' + balStr + '</span>' : '') +
+        '<div class="tx-f-right">' +
+          '<span class="tx-f-amount ' + typeClass + '">' + amtStr + '</span>' +
+          (balStr ? '<span class="tx-f-balance-after">' + balStr + '</span>' : '') +
         '</div>';
 
-      txList.appendChild(row);
+      txFeedList.appendChild(item);
     });
   }
 
-  // Live Search listener
+  // Setup Filter Chips & Search Listener
+  filterChips.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      filterChips.forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      activeFilter = btn.getAttribute("data-filter");
+      applyFiltersAndRenderFeed();
+    });
+  });
+
   if (txSearchInput) {
     txSearchInput.addEventListener("input", function (e) {
-      filterAndRenderTransactions(e.target.value);
+      searchQuery = e.target.value.trim();
+      applyFiltersAndRenderFeed();
     });
   }
 
-  // Fetch Data Routine
+  // ================================================================
+  // DATA FETCHING & POLLING
+  // ================================================================
   function fetchData() {
     fetch("/api/balance", {
       method: "POST",
@@ -313,7 +580,7 @@
       body: JSON.stringify({}),
     })
       .then(function (res) {
-        if (!res.ok) throw new Error("API error");
+        if (!res.ok) throw new Error("API status " + res.status);
         return res.json();
       })
       .then(function (data) {
@@ -332,12 +599,12 @@
             }
           })
           .catch(function () {
-            showError("Sem ligação aos dados em tempo real. A tentar reconectar...");
+            showError("A aguardar ligação à API Pluxee...");
           });
       });
   }
 
-  // Polling for 24/7 background monitor updates
+  // Start polling every 10s for real-time live transactions
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(function () {
@@ -353,7 +620,7 @@
     }, 10000);
   }
 
-  // Startup
+  // Launch
   fetchData();
   startPolling();
 
