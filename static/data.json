@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-12T17:05:54.655402+00:00",
+  "updated_at": "2026-10-20T14:31:05.351101+00:00",
   "balance": {
     "lunch_pass": 43.64,
     "eco_pass": 0.0,
@@ -7,6 +7,16 @@
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "20/10/2026",
+      "description": "REST NAO BURGER",
+      "amount": -15.0,
+      "balance": 43.64,
+      "currency": "EUR",
+      "effective_date": "20/10/2026",
+      "raw_description": "Compra  REST NAO BURGER,LISBOA,PRT",
+      "is_rejected": false
+    },
     {
       "date": "10/10/2026",
       "description": "MBH BRAGA",
