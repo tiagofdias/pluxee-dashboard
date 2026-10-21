@@ -1,12 +1,22 @@
 {
-  "last_check": "2026-10-20T14:31:05.350398+00:00",
+  "last_check": "2026-10-21T10:16:38.494093+00:00",
   "balance": {
-    "lunch_pass": 43.64,
+    "lunch_pass": 28.64,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "20/10/2026",
+      "description": "REST NAO BURGER",
+      "amount": -15.0,
+      "balance": 28.64,
+      "currency": "EUR",
+      "effective_date": "21/10/2026",
+      "raw_description": "Compra REST NAO BURGER,LISBOA,PRT",
+      "is_rejected": false
+    },
     {
       "date": "20/10/2026",
       "description": "REST NAO BURGER",
@@ -589,6 +599,7 @@
     }
   ],
   "fingerprints": [
+    "09b4c91b6561b277112017acf3ac93be",
     "65829a0272f9f0db19071523565b9894",
     "25dcbf172368b518e669374ca6a3c398",
     "13c583c4d13d0e07589434124c353ee6",
@@ -648,6 +659,6 @@
     "b24e015d2f0107228accd1fabd44aa75",
     "af3f1de68f557bf82272b669052d2456"
   ],
-  "tx_count": 58,
+  "tx_count": 59,
   "stale_skip_count": 0
 }
