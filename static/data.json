@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-21T10:16:38.494782+00:00",
+  "updated_at": "2026-10-26T21:55:41.629451+00:00",
   "balance": {
     "lunch_pass": 28.64,
     "eco_pass": 0.0,
@@ -565,6 +565,16 @@
       "currency": "EUR",
       "effective_date": "29/04/2026",
       "raw_description": "Compra POW CHICKS SALDANHA,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "27/04/2026",
+      "description": "CONTINENTE",
+      "amount": -200.0,
+      "balance": 225.92,
+      "currency": "EUR",
+      "effective_date": null,
+      "raw_description": "Compra CONTINENTE,Portugal,PRT",
       "is_rejected": false
     },
     {

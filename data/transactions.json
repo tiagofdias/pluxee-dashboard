@@ -1,5 +1,5 @@
 {
-  "last_check": "2026-10-21T10:16:38.494093+00:00",
+  "last_check": "2026-10-26T21:55:41.628722+00:00",
   "balance": {
     "lunch_pass": 28.64,
     "eco_pass": 0.0,
@@ -568,6 +568,16 @@
       "is_rejected": false
     },
     {
+      "date": "27/04/2026",
+      "description": "CONTINENTE",
+      "amount": -200.0,
+      "balance": 225.92,
+      "currency": "EUR",
+      "effective_date": null,
+      "raw_description": "Compra CONTINENTE,Portugal,PRT",
+      "is_rejected": false
+    },
+    {
       "date": "26/04/2026",
       "description": "CONTINENTE",
       "amount": -200.0,
@@ -655,10 +665,11 @@
     "bde9a5b1a23af8a5e78c6ef1b27f4dc8",
     "6b987e47e9e02baccba617917c1760f3",
     "dd49e4dac389eff602d779e97cb8914c",
+    "2faab354f10312eacc36c29239a0c4eb",
     "4441652b4a317a8d5f668c27d9152450",
     "b24e015d2f0107228accd1fabd44aa75",
     "af3f1de68f557bf82272b669052d2456"
   ],
-  "tx_count": 59,
+  "tx_count": 60,
   "stale_skip_count": 0
 }
