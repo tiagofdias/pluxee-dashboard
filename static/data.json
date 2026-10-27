@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-26T21:55:41.629451+00:00",
+  "updated_at": "2026-10-27T18:22:42.861870+00:00",
   "balance": {
     "lunch_pass": 28.64,
     "eco_pass": 0.0,
@@ -7,6 +7,26 @@
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "27/10/2026",
+      "description": "BASUKU",
+      "amount": -5.5,
+      "balance": 28.64,
+      "currency": "EUR",
+      "effective_date": "27/10/2026",
+      "raw_description": "Compra  BASUKU,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "27/10/2026",
+      "description": "CAMADA FRANCESINHAS",
+      "amount": -16.6,
+      "balance": 28.64,
+      "currency": "EUR",
+      "effective_date": "27/10/2026",
+      "raw_description": "Compra  CAMADA FRANCESINHAS,FAFE,PRT",
+      "is_rejected": false
+    },
     {
       "date": "20/10/2026",
       "description": "REST NAO BURGER",
