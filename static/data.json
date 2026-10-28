@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-28T07:30:11.831613+00:00",
+  "updated_at": "2026-10-28T14:25:49.390161+00:00",
   "balance": {
     "lunch_pass": 230.87,
     "eco_pass": 0.0,
@@ -15,6 +15,26 @@
       "currency": "EUR",
       "effective_date": null,
       "raw_description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "is_rejected": false
+    },
+    {
+      "date": "27/10/2026",
+      "description": "BASUKU",
+      "amount": -5.5,
+      "balance": 208.77,
+      "currency": "EUR",
+      "effective_date": "28/10/2026",
+      "raw_description": "Compra BASUKU,LISBOA,PRT",
+      "is_rejected": false
+    },
+    {
+      "date": "27/10/2026",
+      "description": "CAMADA FRANCESINHAS",
+      "amount": -16.6,
+      "balance": 214.27,
+      "currency": "EUR",
+      "effective_date": "28/10/2026",
+      "raw_description": "Compra CAMADA FRANCESINHAS,FAFE,PRT",
       "is_rejected": false
     },
     {
