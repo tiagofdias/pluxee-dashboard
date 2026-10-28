@@ -1,12 +1,22 @@
 {
-  "updated_at": "2026-10-27T18:22:42.861870+00:00",
+  "updated_at": "2026-10-28T07:30:11.831613+00:00",
   "balance": {
-    "lunch_pass": 28.64,
+    "lunch_pass": 230.87,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
   },
   "transactions": [
+    {
+      "date": "28/10/2026",
+      "description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "amount": 202.23,
+      "balance": 230.87,
+      "currency": "EUR",
+      "effective_date": null,
+      "raw_description": "Carregamento de CAPGEMINI PORTUGAL SA",
+      "is_rejected": false
+    },
     {
       "date": "27/10/2026",
       "description": "BASUKU",
