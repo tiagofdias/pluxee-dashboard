@@ -166,40 +166,12 @@ def get_movements(api_claim: str, benefit_id: str, num: int = 100) -> list:
 
 
 def compute_effective_balance(raw_card_balance: float, transactions: list) -> float:
-    """Compute the true real-time available balance.
+    """Use the card endpoint's current balance.
 
-    In Pluxee Portugal, the card balance endpoint (/api/benefit/card/balance)
-    returns the accounting (ledger) balance, which often does NOT subtract
-    pending or recent card authorizations until settlement (1-2 business days).
-    However, recent movements (/movements) appear immediately with exact amounts.
-
-    This function reconciles the ledger balance with recent transactions so that
-    whenever a payment is made, the payment amount is immediately and accurately
-    subtracted from the available money to spend.
+    Movement balances are historical settlement snapshots and can lag or be
+    reordered relative to top-ups. They cannot establish the available balance.
     """
-    if not transactions:
-        return round(float(raw_card_balance), 2)
-
-    latest = transactions[0]
-    latest_amt = latest.get("amount", 0.0)
-    latest_bal = latest.get("balance")
-
-    # 1. If the latest movement already has a valid post-transaction balance:
-    if latest_bal is not None:
-        return round(float(latest_bal), 2)
-
-    # 2. If the latest movement does NOT have a balance yet (pending authorization):
-    # Search backwards for the most recent transaction with a known balance.
-    for i, tx in enumerate(transactions[1:], start=1):
-        if tx.get("balance") is not None:
-            accum = float(tx["balance"])
-            # Apply all pending transactions from that point forward
-            for pending_tx in reversed(transactions[:i]):
-                accum += pending_tx.get("amount", 0.0)
-            return round(accum, 2)
-
-    # 3. If no past transaction has a balance, subtract from raw_card_balance
-    return round(float(raw_card_balance) + latest_amt, 2)
+    return round(float(raw_card_balance), 2)
 
 
 def fetch_all(api_claim: str, card_id: str, benefit_id: str, num: int = 100) -> dict:

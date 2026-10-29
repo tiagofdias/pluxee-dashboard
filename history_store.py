@@ -16,10 +16,11 @@ def tx_fingerprint(tx: dict) -> str:
     date = str(tx.get("date", "")).strip()
     desc = str(tx.get("description", "")).strip()
     amt = str(tx.get("amount", "")).strip()
-    bal = str(tx.get("balance", "")).strip()
-    eff = str(tx.get("effective_date", "")).strip()
-    raw_desc = str(tx.get("raw_description", "")).strip()
-    raw = f"{date}|{desc}|{amt}|{bal}|{eff}|{raw_desc}"
+    # Settlement changes balances, effective dates and raw descriptions.
+    # These fields are metadata, not the identity of a purchase.
+    from decimal import Decimal
+    amt = str(Decimal(amt or "0").quantize(Decimal("0.01")))
+    raw = f"{date}|{desc.casefold()}|{amt}|{tx.get('currency', 'EUR')}"
     return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
 

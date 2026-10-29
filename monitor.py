@@ -271,10 +271,10 @@ def notify_transaction(tx, balance_after):
     is_credit = tx["amount"] > 0
     if is_credit:
         title = "🟢 Pluxee — Carregamento Recebido"
-        balance_label = "Novo saldo"
+        balance_label = "Saldo atual"
     else:
         title = "🔴 Pluxee — Pagamento Efetuado"
-        balance_label = "Saldo restante"
+        balance_label = "Saldo atual"
 
     amount_str = fmt_eur(tx["amount"], show_sign=True)
     balance_str = fmt_eur(balance_after)
@@ -695,15 +695,17 @@ def check_for_new_transactions(config):
         save_state(current_balance, current_txs)
         return 0, current_balance
 
-    # Compare transactions by fingerprint
-    if "fingerprints" in prev_state:
-        prev_fingerprints = set(prev_state["fingerprints"])
-    else:
-        prev_fingerprints = set(_tx_fingerprint(tx) for tx in prev_state.get("transactions", []))
+    # Recompute identities from stored transactions to migrate legacy fingerprints.
+    prev_fingerprints = {_tx_fingerprint(tx) for tx in prev_state.get("transactions", [])}
     current_fingerprints = set(_tx_fingerprint(tx) for tx in current_txs)
 
     new_fingerprints = current_fingerprints - prev_fingerprints
-    new_txs = [tx for tx in current_txs if _tx_fingerprint(tx) in new_fingerprints]
+    new_txs = []
+    for tx in current_txs:
+        fp = _tx_fingerprint(tx)
+        if fp in new_fingerprints:
+            new_txs.append(tx)
+            new_fingerprints.remove(fp)
 
     # Guard: only notify for transactions that are chronologically new (>= latest known date).
     # Older historical transactions being accumulated/backfilled will be saved silently.
@@ -721,18 +723,9 @@ def check_for_new_transactions(config):
     prev_total = sum(prev_balance.values()) if prev_balance else total
     if notify_txs:
         log.info(f"Found {len(notify_txs)} new transaction(s) to notify!")
-        new_txs_chrono = list(reversed(notify_txs))
-        running_balance = prev_total if (prev_total is not None and prev_total > 0) else total
-        for tx in new_txs_chrono:
-            if tx.get("balance") is not None:
-                bal_after = float(tx["balance"])
-            else:
-                bal_after = round(running_balance + tx["amount"], 2)
-            running_balance = bal_after
-            notify_transaction(tx, bal_after)
-
-        current_balance["lunch_pass"] = running_balance
-        total = running_balance
+        for tx in reversed(notify_txs):
+            if not tx.get("is_rejected"):
+                notify_transaction(tx, total)
     else:
         log.info(f"No new notifications required ({len(new_txs)} historical records merged silently).")
 
@@ -743,19 +736,15 @@ def check_for_new_transactions(config):
             log.warning("Balance dropped to €0.00 with no new transactions — skipping glitch.")
             return 0, None
 
-        diff = total - prev_total
-        if diff > 0:
-            title = "🟢 Pluxee — Carregamento Detetado"
-            msg = f"O seu cartão foi carregado com <b>{fmt_eur(diff, show_sign=True)}</b>!\n\n💰 Novo saldo: <b>{fmt_eur(total)}</b>"
-        else:
-            title = "🔴 Pluxee — Saldo Atualizado"
-            msg = f"O saldo diminuiu <b>{fmt_eur(abs(diff))}</b>.\n\n💰 Saldo restante: <b>{fmt_eur(total)}</b>"
-
-        send_notification(title=title, message=msg)
+        # A balance correction alone does not prove a purchase or top-up.
+        # Persist it silently; movement notifications carry verified amounts.
         balance_changed = True
 
     # Save updated state ONLY if there are new transactions or balance changed
-    if new_txs or balance_changed:
+    metadata_changed = history_store.merge_transactions(
+        prev_state.get("transactions", []), current_txs
+    ) != prev_state.get("transactions", [])
+    if new_txs or balance_changed or metadata_changed:
         log.info("State changed — updating persistent files.")
         save_state(current_balance, current_txs)
     else:
