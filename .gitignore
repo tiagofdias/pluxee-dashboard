@@ -9,13 +9,15 @@ __pycache__/
 
 # Environment & secrets
 .env
+*.pem
+*.key
 
 # Debug files
 debug/
 
-# Runtime data (state persisted in transactions.json, logs/pids ignored)
+# Private runtime data: never commit balances, history or sessions
 data/*
-!data/transactions.json
+
 
 # OS
 .DS_Store
@@ -24,3 +26,13 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Never publish private snapshots or generated demo build output
+static/data.json
+_site/
+
+# App packages and network captures are private analysis inputs
+*.apk
+*.apks
+*.har
+pluxee-login*.json

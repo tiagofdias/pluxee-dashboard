@@ -97,12 +97,12 @@ def get_movements(api_claim: str, benefit_id: str, num: int = 100) -> list:
         list of dicts: [
             {
                 "date": "24/09/2026",
-                "description": "SOLSTICIO MEL",
+                "description": "RESTAURANTE EXEMPLO",
                 "amount": -15.00,
-                "balance": 61.94,
+                "balance": 75.00,
                 "currency": "EUR",
                 "effective_date": "23/09/2026",
-                "raw_description": "Compra SOLSTICIO MEL...",
+                "raw_description": "Compra RESTAURANTE EXEMPLO...",
                 "is_rejected": False
             },
             ...

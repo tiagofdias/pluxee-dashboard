@@ -8,6 +8,7 @@ historical ledger so that past movements are preserved forever for analytics.
 import os
 import json
 import hashlib
+import cloud_store
 from datetime import datetime, timezone
 
 
@@ -66,11 +67,14 @@ def merge_transactions(existing_txs: list, new_txs: list) -> list:
 
 def load_history(data_dir: str) -> list:
     """Load historical transactions from history file or fallback to state/static file."""
+    if cloud_store.enabled():
+        transactions = cloud_store.load_history()
+        if transactions is not None:
+            return transactions
     history_file = os.path.join(data_dir, "transactions_history.json")
     state_file = os.path.join(data_dir, "transactions.json")
-    static_file = os.path.join(os.path.dirname(__file__), "static", "data.json")
 
-    for path in (history_file, state_file, static_file):
+    for path in (history_file, state_file):
         if os.path.exists(path):
             try:
                 with open(path, "r", encoding="utf-8") as f:
@@ -88,6 +92,8 @@ def load_history(data_dir: str) -> list:
 
 def save_history(data_dir: str, transactions: list) -> None:
     """Save the complete cumulative transaction ledger to disk."""
+    if cloud_store.enabled():
+        cloud_store.save_history(transactions)
     os.makedirs(data_dir, exist_ok=True)
     history_file = os.path.join(data_dir, "transactions_history.json")
     try:

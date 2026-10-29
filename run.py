@@ -50,12 +50,42 @@ def _sig_handler(signum, frame):
     sys.exit(0)
 
 
+KEEPALIVE_MODE = os.getenv("KEEPALIVE_MODE", "smart").lower().strip()
+
+
+def is_active_hours():
+    """Check if current time is within active hours (07:30 - 23:30 Lisbon/UTC).
+
+    Sleeping 8 hours at night saves 240+ instance hours per month,
+    ensuring you only consume ~490 hours of Render's 750 free monthly hours.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    minute_of_day = now.hour * 60 + now.minute
+    return (7 * 60 + 30) <= minute_of_day < (23 * 60 + 30)
+
+
 def keepalive_worker():
-    """Periodically ping /ping so Render free-tier never goes to sleep."""
+    """Periodically ping /ping based on KEEPALIVE_MODE:
+    - 'smart' (default): Keeps awake during daytime (07:30-23:30), sleeps at night to save hours.
+    - 'off': Completely disabled (allows service to sleep when idle; woken by external cron or visits).
+    - 'always': 24/7 continuous pings (uses ~744h/month).
+    """
+    if KEEPALIVE_MODE == "off":
+        print("[Runner] Keepalive is OFF — service will sleep when idle to conserve hours.")
+        return
+
+    print(f"[Runner] Keepalive watchdog activated (mode: {KEEPALIVE_MODE}, target: {RENDER_URL or 'local'})")
+
     while not _shutting_down:
-        time.sleep(600)  # Ping every 10 minutes (Render spins down after 15 min)
+        time.sleep(600)  # Check every 10 minutes
         if _shutting_down:
             break
+
+        if KEEPALIVE_MODE == "smart" and not is_active_hours():
+            print("[Runner] Night hours (23:30-07:30) — skipping keepalive ping to allow sleep & save hours.")
+            continue
+
         target = RENDER_URL.rstrip("/") + "/ping" if RENDER_URL else f"http://127.0.0.1:{PORT}/ping"
         try:
             r = requests.get(target, timeout=10)
@@ -67,7 +97,7 @@ def keepalive_worker():
 def start_monitor():
     """Start monitor.py in a supervised subprocess."""
     global monitor_proc
-    print("[Runner] Starting Pluxee 24/7 real-time monitor...")
+    print("[Runner] Starting Pluxee real-time monitor...")
     monitor_proc = subprocess.Popen(
         [sys.executable, MONITOR_SCRIPT],
         cwd=os.path.dirname(__file__),
@@ -81,14 +111,16 @@ def main():
     signal.signal(signal.SIGTERM, _sig_handler)
     signal.signal(signal.SIGINT, _sig_handler)
 
-    # 1. Start the monitor
-    start_monitor()
+    # The web dashboard authenticates each user independently. Start the optional
+    # owner monitor only when its server-side credentials are configured.
+    from cloud_store import setting
+    if all(setting(key) for key in ("PLUXEE_API_CLAIM", "PLUXEE_CARD_ID", "PLUXEE_BENEFIT_ID")):
+        start_monitor()
 
-    # 2. Start keepalive thread if on Render
-    if os.getenv("RENDER") or RENDER_URL:
+    # 2. Start keepalive thread if on Render and not disabled
+    if (os.getenv("RENDER") or RENDER_URL) and KEEPALIVE_MODE != "off":
         t = threading.Thread(target=keepalive_worker, daemon=True)
         t.start()
-        print(f"[Runner] Render keepalive watchdog activated (target: {RENDER_URL or 'local'})")
 
     # 3. Determine web server command
     # On POSIX/Linux (Render), use gunicorn. On Windows, fall back to Python app.py

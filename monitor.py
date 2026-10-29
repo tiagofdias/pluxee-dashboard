@@ -27,6 +27,8 @@ import requests
 sys.path.insert(0, os.path.dirname(__file__))
 from pluxee_api import fetch_all, PluxeeAuthError, PluxeeConnectionError
 import history_store
+import cloud_store
+import push_notifications
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -96,6 +98,8 @@ def load_config():
 
 def load_state():
     """Load the last-known state from disk."""
+    if cloud_store.enabled():
+        return cloud_store.load_state()
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE, "r", encoding="utf-8") as f:
@@ -107,7 +111,7 @@ def load_state():
 
 
 def save_state(balance, transactions, stale_skip_count=0):
-    """Persist the current state to disk, merge into historical ledger, and update static site data."""
+    """Persist private state locally and in Supabase; never export public data."""
     os.makedirs(DATA_DIR, exist_ok=True)
     existing_history = history_store.load_history(DATA_DIR)
     all_transactions = history_store.merge_transactions(existing_history, transactions)
@@ -125,25 +129,8 @@ def save_state(balance, transactions, stale_skip_count=0):
     with open(STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
 
-    # Export static/data.json for GitHub Pages dashboard
-    _export_site_data(balance, all_transactions)
-
-
-def _export_site_data(balance, transactions):
-    """Write static data.json for GitHub Pages dashboard."""
-    site_dir = os.path.join(os.path.dirname(__file__), "static")
-    os.makedirs(site_dir, exist_ok=True)
-    site_file = os.path.join(site_dir, "data.json")
-    payload = {
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "balance": balance,
-        "transactions": transactions,
-    }
-    try:
-        with open(site_file, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2, ensure_ascii=False)
-    except IOError as e:
-        log.warning(f"Could not export static/data.json: {e}")
+    if cloud_store.enabled():
+        cloud_store.save_state(state)
 
 
 def _tx_fingerprint(tx):
@@ -265,6 +252,20 @@ def send_notification(title, message):
         log.error(f"Failed to send Telegram notification: {e}")
         return False
 
+    return False
+
+
+def send_push(title, message):
+    """Send push notification to all registered PWA devices."""
+    try:
+        push_notifications.send_push_notification(
+            title=title,
+            body=message.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", ""),
+            url="/",
+        )
+    except Exception as e:
+        log.error(f"Failed to send push notification: {e}")
+
 
 def notify_transaction(tx, balance_after):
     """Send a Telegram notification for a single transaction (payment or recharge)."""
@@ -286,6 +287,8 @@ def notify_transaction(tx, balance_after):
     )
 
     send_notification(title, message)
+    # Also send push notification
+    push_notifications.send_transaction_notification(tx, balance_after)
 
 
 def send_test_notification():
@@ -293,10 +296,12 @@ def send_test_notification():
     send_notification(
         title="🔔 Pluxee Monitor — Teste",
         message=(
-            "O monitor Pluxee via Telegram está a funcionar!\n"
+            "O monitor Pluxee está a funcionar!\n"
             "Irá receber alertas automáticos sempre que houver novas transações ou carregamentos."
         ),
     )
+    # Also test push
+    push_notifications.send_test_push_notification()
 
 
 # ---------------------------------------------------------------------------
@@ -642,6 +647,7 @@ def check_for_new_transactions(config):
                     "Por favor, atualize o PLUXEE_API_CLAIM nas definições."
                 ),
             )
+            push_notifications.send_auth_expired_notification()
         return 0, None
     except PluxeeConnectionError as e:
         log.warning(f"Connection error / server outage: {e}")
@@ -679,6 +685,7 @@ def check_for_new_transactions(config):
                     f"💰 Último saldo conhecido: {fmt_eur(prev_total)}"
                 ),
             )
+            push_notifications.send_outage_notification(prev_total)
             _mark_outage_notified()
         else:
             log.warning("⚠️ Outage still ongoing. Skipping check.")
@@ -692,6 +699,7 @@ def check_for_new_transactions(config):
             title="✅ Pluxee — Sistema recuperado",
             message=f"O sistema Pluxee está novamente operacional.\n\n💰 Saldo atual: {fmt_eur(total)}",
         )
+        push_notifications.send_recovery_notification(total)
         save_state(current_balance, current_txs)
         return 0, current_balance
 

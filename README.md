@@ -1,148 +1,141 @@
-# 💳 Pluxee Portugal — Balance Dashboard & Transaction Monitor
+﻿# Pluxee — login direto e demonstração pública
 
-[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Live%20Dashboard-brightgreen)](https://tiagofdias.github.io/pluxee-dashboard/)
-[![Pluxee Mobile API](https://img.shields.io/badge/Pluxee%20API-Mobile%20v2-blue)](https://api.mobile.clients.pluxee.pt)
-[![Telegram Notifications](https://img.shields.io/badge/Telegram-Bot%20Alerts-blue?logo=telegram)](https://telegram.org)
+Dashboard em Flask para o cartão refeição Pluxee Portugal. O login usa o mesmo
+**email e palavra-passe da app**, sem registo de outra conta e **sem base de dados**.
+A demonstração pública usa dados fictícios e não faz pedidos à API privada.
 
-A real-time balance dashboard and automated transaction monitor for **Pluxee Portugal** (formerly Sodexo Pass Portugal). Directly communicates with the official Pluxee Portugal Mobile API (`api.mobile.clients.pluxee.pt`) to provide instant, 100% accurate transaction tracking, live balance consultation, and immediate push notifications to **Telegram**.
+## Utilização
 
----
-
-## ✨ Features
-
-* **⚡ Ultra-Fast Official Mobile API**: Bypasses slow web scraping. Communicates directly with Pluxee's mobile backend (`okhttp/4.12.0`) in ~150ms with clean JSON.
-* **📱 Real-Time Push Notifications**:
-  * **🔴 Expenses**: Notifies every purchase with the exact merchant name, amount spent, and **remaining running balance**.
-  * **🟢 Company Top-Ups**: Automatically alerts when your employer loads meal allowance onto your card each month.
-  * **📈 Balance Safeguard**: Extra check detects sudden balance increases even before transaction line items appear.
-* **☁️ 100% Free 24/7 Monitoring via GitHub Actions**:
-  * Runs automatically every 15 minutes (or on-demand).
-  * Requires zero server hosting, credit cards, or maintenance.
-* **🌐 Automated GitHub Pages Dashboard**:
-  * Live glassmorphism web dashboard hosted on GitHub Pages: [`https://tiagofdias.github.io/pluxee-dashboard/`](https://tiagofdias.github.io/pluxee-dashboard/).
-  * Displays total balance, pass breakdowns, animated ring charts, and 20 recent transactions.
-* **💾 Automated Repository State Persistence**:
-  * Tracks transaction fingerprints directly in `data/transactions.json` via GitHub Actions commits.
-  * Zero chat clutter: no raw files or pinned messages sent to Telegram.
-
----
-
-## 🔔 Notification Previews
-
-### Expense (Gasto)
-> **🔴 Pluxee — Pagamento Efetuado**  
-> `MCDONALDS SALDANHA`  
-> Montante: `-€1,90`  
->   
-> 💰 **Saldo restante:** `€76,94`
-
-### Company Monthly Load (Carregamento)
-> **🟢 Pluxee — Carregamento Recebido**  
-> `Carregamento de CAPGEMINI PORTUGAL SA`  
-> Montante: `+€211,86`  
->   
-> 💰 **Novo saldo:** `€273,80`
-
-### On-Demand Balance Query (/balance)
-> **User:** `/balance`  
->  
-> **Bot:**  
-> 💳 **Pluxee — Saldo Atual**  
->  
-> 💰 **Total Disponível: €273,80**  
-> 🍽️ Refeição: **€273,80**  
->  
-> 📊 **Últimos Movimentos:**  
-> 🟢 `24/09` **+€211,86** — Carregamento de CAPGEMINI PORTUGAL SA  
-> 🔴 `22/09` **-€15,00** — SOLSTICIO MEL  
-
----
-
-## 🚀 Quick Setup
-
-### 1. Intercept Mobile API Parameters
-Using a network proxy (e.g., [HTTP Toolkit](https://httptoolkit.com/), Charles, or Proxyman) on your mobile device, inspect the Pluxee Portugal app requests to obtain:
-* **`PLUXEE_API_CLAIM`**: The `ApiClaim` header value from any authorized request.
-* **`PLUXEE_CARD_ID`**: The card reference ID (`referenceC`), formatted as `<base64>=<salt>`.
-* **`PLUXEE_BENEFIT_ID`**: The benefit reference ID, e.g. `Fjzuh5Hrgz...`.
-
-### 2. Configure Telegram Bot
-1. Open Telegram and search for **`@BotFather`**.
-2. Create a new bot with `/newbot` and copy your **`TELEGRAM_TOKEN`**.
-3. Search for **`@userinfobot`** in Telegram to obtain your personal numerical **`TELEGRAM_CHAT_ID`**.
-4. Send `/start` to your newly created bot so it can message you.
-
-### 3. Setup Render (24/7 Real-Time Monitoring)
-1. Fork or push this repository to GitHub.
-2. In [Render Dashboard](https://dashboard.render.com/), click **New** > **Blueprint** and connect your repo (or create a **Web Service** using `render.yaml`).
-3. Set your environment variables in Render:
-   * `PLUXEE_API_CLAIM`: Your intercepted ApiClaim token.
-   * `TELEGRAM_TOKEN`: Your Telegram bot token.
-   * `TELEGRAM_CHAT_ID`: Your Telegram numeric chat ID.
-   * `POLL_INTERVAL_SECONDS`: `60` (or `30` for ultra fast alerts).
-4. Deploy! The service uses `python run.py` to supervise both the 24/7 monitor and the web server in the same container, with automatic self-keepalive pings so it stays alive 24/7.
-
-### 4. Setup GitHub Actions & Pages (Alternative / Backup)
-1. Go to repository **Settings** > **Secrets and variables** > **Actions**.
-2. Add secrets: `PLUXEE_API_CLAIM`, `PLUXEE_CARD_ID`, `PLUXEE_BENEFIT_ID`, `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`.
-3. Enable Pages under **Settings** > **Pages** (Source: GitHub Actions).
-
----
-
-## 💻 Running Locally
-
-### Prerequisites
-* Python 3.10+
-* `pip install -r requirements.txt`
-
-### Local Configuration
-Copy `.env.example` to `.env` and fill in your values:
-```env
-PLUXEE_API_CLAIM=your_api_claim_token_here
-PLUXEE_CARD_ID=bHnxCGNGTfJEdgXDz4paOPlcAr6fOsEDgIgkE84nDT8%3DslEA7yYOHkT0tOM3
-PLUXEE_BENEFIT_ID=Fjzuh5HrgzFxK%2FWm9BXIAQ%3D%3DX0kllae3G4hK4L3I
-POLL_INTERVAL_SECONDS=300
-TELEGRAM_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
-TELEGRAM_CHAT_ID=123456789
-```
-
-### Commands
 ```powershell
-# Send a test notification to Telegram
-python monitor.py --test
+pip install -r requirements.txt
+python -m flask --app app run --port 5000
+```
 
-# Run a single transaction check
+- `http://127.0.0.1:5000/login`: entrar com a conta da app Pluxee Portugal.
+- `http://127.0.0.1:5000/`: dashboard autenticado.
+- `http://127.0.0.1:5000/demo`: demonstração sem conta e com dados sintéticos.
+
+Não são necessárias variáveis Pluxee nem Supabase para usar o login web.
+Em produção, configurar `APP_ORIGIN` com a origem HTTPS exata do backend.
+Localmente, deixar essa variável vazia. Usar HTTPS em qualquer acesso remoto.
+
+## Login encontrado no APK 3.0.7
+
+A análise estática do APK fornecido pelo proprietário identificou:
+
+1. `POST /api/user/login?idLanguage=1`, com email/password cifrados no backend.
+2. A resposta da Pluxee fornece o `sessionId` e o identificador do utilizador.
+3. O backend gera um `ApiClaim` novo para cada pedido, seguindo o algoritmo da app.
+4. Os cartões são descobertos a partir do utilizador autenticado; não se usam
+   referências globais do cartão do servidor.
+5. O dashboard lê saldo e movimentos apenas do cartão associado àquela sessão.
+
+O algoritmo foi validado contra o vetor de teste incluído no APK. Um claim novo,
+gerado a partir da sessão já configurada no projeto, também foi aceite pelo endpoint
+real de saldo. O utilizador validou depois o login real no formulário local: o
+backend concluiu a autenticação e a consulta de saldo/movimentos com resposta 200.
+Não se reutilizaram passwords das capturas. Os testes automatizados de login
+simulam respostas da Pluxee. Se a Pluxee exigir reCAPTCHA/SSO/verificação adicional,
+o fluxo web atual pode não concluir o login; não tenta contornar esses controlos.
+Neste momento, contas com vários cartões refeição exigem uma futura seleção de cartão.
+
+Para testar uma única vez num terminal local privado:
+
+```powershell
+python scripts/check_pluxee_login.py
+```
+
+A palavra-passe fica oculta. O verificador não guarda nem mostra credenciais,
+tokens ou dados financeiros, e não repete tentativas automaticamente.
+
+## Proteção dos dados
+
+- Sessões opacas de até 8 horas em cookie HttpOnly, SameSite=Lax e Secure em produção.
+- Password e email não são persistidos. A sessão Pluxee, referências do cartão e
+  último resultado ficam apenas na memória do processo, isolados por sessão.
+- Logout, expiração ou reinício do servidor eliminam a sessão. Será preciso voltar
+  a entrar quando o Render reiniciar ou suspender o processo.
+- Pedidos que alteram estado exigem proteção CSRF e validação de origem.
+- O backend limita tentativas; erros não repetem o login nem mostram respostas
+  brutas da Pluxee. Após duas tentativas falhadas por email, aguarda 15 minutos.
+- Os utilizadores web não podem consultar logs, modificar o monitor ou subscrever
+  notificações do cartão configurado no servidor.
+- A cache de uma sessão nunca usa ficheiros nem dados de outro utilizador.
+- Páginas privadas e dados financeiros não são guardados na cache HTTP ou na PWA.
+  O service worker remove as caches antigas `pluxee-*`.
+- `/data.json`, `/static/data.json` e ficheiros de runtime não são públicos.
+- A demo não chama a API privada e identifica explicitamente os dados fictícios.
+- Usar **um worker** com várias threads: as sessões são locais ao processo.
+  `run.py` já configura Gunicorn com um worker e quatro threads.
+
+**Dados anteriormente publicados:** remover ficheiros atuais não apaga versões
+anteriores do Git nem cópias descarregadas. A visibilidade e o histórico do repo
+precisam de revisão se contiverem dados pessoais. Não se reescreveu o histórico
+automaticamente. O antigo snapshot público foi preservado apenas localmente em
+`data/previous_public_snapshot.json`, ignorado pelo Git.
+
+## Publicar só a demo
+
+```powershell
+python scripts/build_demo.py --output _site
+```
+
+O destino tem de estar vazio. A compilação usa uma lista explícita de ficheiros
+públicos e não copia dados de runtime, `.env`, APK ou código descompilado.
+O GitHub Pages aloja apenas essa demo; o login privado requer o backend Flask.
+A variável opcional `PRIVATE_APP_URL` liga o botão Entrar à origem HTTPS do backend.
+Sem essa variável, a demo inclui uma página de login informativa sem backend.
+
+## Monitor pessoal separado — opcional
+
+O monitor Telegram existente continua separado das sessões web. Pode usar as
+credenciais do proprietário definidas apenas no servidor. O login de um visitante
+nunca as utiliza nem atualiza o seu histórico. As notificações web desse monitor
+não estão disponíveis nas sessões de login direto.
+
+```powershell
 python monitor.py --once
-
-# Start continuous background monitoring
 python monitor.py
-
-# Launch local Flask web dashboard
-python app.py
+python monitor.py --status
+python monitor.py --stop
+python run.py
+python -m unittest discover -s tests -v
 ```
 
----
+Para o monitor, a persistência por ficheiros privados continua disponível.
+O adaptador opcional Supabase fica preparado para quem precisar de histórico durável,
+mas não foi provisionado e não é dependência do dashboard. A migração e ferramenta
+`scripts/setup_cloud.py` destinam-se apenas a essa opção de monitorização.
 
-## 📂 Project Architecture
+O workflow GitHub não grava commits com movimentos nem publica ficheiros privados.
+O trabalho de monitorização cloud só é ativado com a variável de repositório
+`ENABLE_PRIVATE_MONITOR=true` e respetivos secrets; o trabalho de publicação serve
+apenas a demo.
 
+- `/ping`: estado público sem dados financeiros.
+- `/api/cron/check`: exige `Authorization: Bearer <CRON_SECRET>`.
+- `/api/telegram/webhook`: exige `X-Telegram-Bot-Api-Secret-Token`, igual a
+  `TELEGRAM_WEBHOOK_SECRET`.
+- Sem esses segredos, os endpoints automáticos recusam pedidos.
+
+## Diagnosticar uma recusa de login sem repetir tentativas
+
+A mensagem HTTP 400 / código 214 veio da etapa de autenticação, não da consulta
+de cartões. Esse código, por si só, não demonstra se há diferença nos dados
+introduzidos ou no formato enviado pela integração.
+
+Para comparar localmente com um pedido da app que teve resposta 200:
+
+```powershell
+python scripts/compare_login_capture.py "C:\caminho\pluxee-login.json"
 ```
-pluxee-dashboard/
-├── .github/workflows/
-│   └── monitor.yml        # GitHub Actions 15-min cron & Pages deployment
-├── pluxee_api.py          # Mobile API client (balance & v2 movements)
-├── monitor.py             # Transaction polling, state & push notifications
-├── app.py                 # Flask server (local & Render backend)
-├── static/
-│   ├── index.html         # Responsive dashboard UI
-│   ├── style.css          # Glassmorphism dark-theme styling
-│   ├── app.js             # Real-time UI rendering & dynamic loaders
-│   └── data.json          # Cached site state deployed to Pages
-├── requirements.txt       # Python dependencies
-└── .env.example           # Environment template
-```
 
----
+Aceita o corpo JSON desse pedido ou um HAR. O ficheiro deve permanecer local e
+não ser publicado: contém campos de autenticação cifrados. O comparador pede o
+email/password num terminal privado, usa o IV da captura e compara os resultados.
+Não decifra a password capturada, não faz pedidos à API nem guarda credenciais.
+Mostra apenas se cada campo corresponde. Partilhar só esses dois resultados.
 
-## 🛡️ License
-
-MIT License. Educational and personal productivity tool. Not affiliated with or endorsed by Pluxee or Sodexo.
+A página de login usa agora `login.css` independente e ficheiros com versão.
+Um teste de browser com a cache antiga `pluxee-v2` confirmou a atualização para
+`pluxee-public-v5` e o carregamento correto do novo layout na primeira visita.

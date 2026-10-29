@@ -12,14 +12,47 @@ import subprocess
 import traceback
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, request, send_from_directory
-from flask_cors import CORS
+from flask import Flask, g, jsonify, request, send_from_directory
 
 import pluxee_api
 import history_store
+import push_notifications
 
 app = Flask(__name__, static_folder="static")
-CORS(app)
+# Render terminates HTTPS at its reverse proxy. Trust exactly that proxy hop.
+if os.getenv("RENDER", "").lower() in ("true", "1"):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
+import cloud_store
+import dashboard_auth
+app.register_blueprint(dashboard_auth.blueprint)
+app.before_request(dashboard_auth.check_private_request)
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
+
+
+@app.after_request
+def protect_responses(response):
+    # Private pages/data must not survive logout in an HTTP cache or a PWA cache.
+    response.headers["Cache-Control"] = "no-store, private"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    )
+    if request.is_secure or cloud_store.setting("RENDER"):
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
+    return response
+
+
+@app.get("/auth.js")
+@app.get("/login.js")
+@app.get("/demo-data.js")
+@app.get("/login.css")
+def public_javascript():
+    return send_from_directory("static", request.path.lstrip("/"))
 
 MONITOR_SCRIPT = os.path.join(os.path.dirname(__file__), "monitor.py")
 IS_RENDER = bool(os.getenv("RENDER"))
@@ -119,103 +152,47 @@ def serve_js():
     return send_from_directory("static", "app.js")
 
 
-@app.route("/data.json")
-def serve_data():
-    """Serve up-to-date balance and transaction data, preferring STATE_FILE from live monitor."""
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                state = json.load(f)
-            return jsonify({
-                "updated_at": state.get("last_check") or datetime.now(timezone.utc).isoformat(),
-                "balance": state.get("balance", {}),
-                "transactions": state.get("transactions", []),
-            })
-        except Exception:
-            pass
+@app.route("/sw.js")
+def serve_sw():
+    """Serve Service Worker from root scope (critical for PWA)."""
+    response = send_from_directory("static", "sw.js")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
-    # Try live fetch if credentials are configured
-    api_claim = _get_env("PLUXEE_API_CLAIM")
-    card_id = _get_env("PLUXEE_CARD_ID")
-    benefit_id = _get_env("PLUXEE_BENEFIT_ID")
-    if api_claim and card_id and benefit_id:
-        try:
-            result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=100)
-            existing_history = history_store.load_history(DATA_DIR)
-            all_txs = history_store.merge_transactions(existing_history, result["transactions"])
-            history_store.save_history(DATA_DIR, all_txs)
-            return jsonify({
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "balance": result["balance"],
-                "transactions": all_txs,
-            })
-        except Exception:
-            pass
 
-    return send_from_directory("static", "data.json")
+@app.route("/manifest.json")
+def serve_manifest():
+    """Serve PWA Web App Manifest."""
+    return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/icons/<path:filename>")
+def serve_icon(filename):
+    """Serve PWA icons."""
+    return send_from_directory("static/icons", filename)
 
 
 @app.route("/api/balance", methods=["GET", "POST"])
 def get_balance():
-    """Fetch Pluxee balance and transactions via Mobile API, merging with historical ledger."""
-    data = (request.get_json(silent=True) or {}) if request.method == "POST" else {}
-
-    api_claim = data.get("api_claim", "").strip() or _get_env("PLUXEE_API_CLAIM")
-    card_id = data.get("card_id", "").strip() or _get_env("PLUXEE_CARD_ID")
-    benefit_id = data.get("benefit_id", "").strip() or _get_env("PLUXEE_BENEFIT_ID")
-
-    if not api_claim or not card_id or not benefit_id:
-        return jsonify({
-            "error": "Credenciais da API Móvel necessárias (PLUXEE_API_CLAIM, PLUXEE_CARD_ID, PLUXEE_BENEFIT_ID)."
-        }), 400
-
+    """Only fetch the card belonging to this browser's own Pluxee login."""
+    row = g.private_session
+    account = row["account"]
     try:
-        result = pluxee_api.fetch_all(api_claim, card_id, benefit_id, num=100)
-        # Merge fetched transactions into historical ledger
-        existing_history = history_store.load_history(DATA_DIR)
-        all_transactions = history_store.merge_transactions(existing_history, result["transactions"])
-        history_store.save_history(DATA_DIR, all_transactions)
-
-        # Update cached state
-        state = {
-            "last_check": datetime.now(timezone.utc).isoformat(),
-            "balance": result["balance"],
-            "transactions": all_transactions,
-            "fingerprints": [history_store.tx_fingerprint(t) for t in all_transactions],
-            "tx_count": len(all_transactions),
-        }
-        try:
-            with open(STATE_FILE, "w", encoding="utf-8") as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
-        except Exception:
-            pass
-
-        return jsonify({
-            "success": True,
-            "balance": result["balance"],
-            "raw_balance": result.get("raw_balance"),
-            "transactions": all_transactions,
-        })
-    except pluxee_api.PluxeeAuthError as e:
-        return jsonify({"error": f"Sessão expirada ou não autorizada: {str(e)}"}), 401
-    except pluxee_api.PluxeeConnectionError as e:
-        if os.path.exists(STATE_FILE):
-            try:
-                with open(STATE_FILE, "r", encoding="utf-8") as f:
-                    cached_state = json.load(f)
-                return jsonify({
-                    "success": True,
-                    "cached": True,
-                    "warning": "Servidores da Pluxee temporariamente inacessíveis. A apresentar último saldo sincronizado.",
-                    "balance": cached_state.get("balance", {}),
-                    "transactions": cached_state.get("transactions", []),
-                }), 200
-            except Exception:
-                pass
-        return jsonify({"error": f"Erro de ligação aos servidores da Pluxee: {str(e)}"}), 502
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
+        result = account.fetch_snapshot()
+        # Memory only; never merge into the server owner's historical ledger.
+        if not account.active:
+            return jsonify(error="Session ended"), 401
+        row["snapshot"] = result
+        return jsonify(result)
+    except dashboard_auth.pluxee_mobile_auth.MobileLoginError as error:
+        dashboard_auth.revoke_session(row)
+        return jsonify(error=str(error)), 401
+    except dashboard_auth.pluxee_mobile_auth.MobileUnavailable as error:
+        cached = row.get("snapshot")
+        if cached:
+            return jsonify({**cached, "cached": True, "warning": str(error)}), 200
+        return jsonify(error=str(error)), 503
 
 
 # ===========================================================================
@@ -251,44 +228,9 @@ def _is_monitor_running():
 
 @app.route("/api/notifications/status", methods=["GET"])
 def notification_status():
-    """Check the current notification monitor status."""
-    running = _is_monitor_running()
-    pid = _read_pid() if running else None
-
-    interval = int(_get_env("POLL_INTERVAL_SECONDS", "300"))
-    has_creds = bool(
-        _get_env("PLUXEE_API_CLAIM") and _get_env("PLUXEE_CARD_ID") and _get_env("PLUXEE_BENEFIT_ID")
-    )
-    has_telegram = bool(os.getenv("TELEGRAM_TOKEN") and os.getenv("TELEGRAM_CHAT_ID"))
-
-    last_log = ""
-    if os.path.exists(LOG_FILE):
-        try:
-            with open(LOG_FILE, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-                last_log = "".join(lines[-30:]) if lines else ""
-        except IOError:
-            pass
-
-    state = None
-    if os.path.exists(STATE_FILE):
-        try:
-            with open(STATE_FILE, "r", encoding="utf-8") as f:
-                state = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            pass
-
-    return jsonify({
-        "running": running,
-        "pid": pid,
-        "channel": "Telegram Bot (@CartaoRefeicaoBot)",
-        "interval": interval,
-        "has_credentials": has_creds,
-        "has_telegram": has_telegram,
-        "is_render": IS_RENDER,
-        "last_check": state.get("last_check") if state else None,
-        "last_log": last_log,
-    })
+    """Session-local refresh status. Never return the owner's logs or PID."""
+    snapshot = g.private_session.get("snapshot") or {}
+    return jsonify(running=False, last_check=snapshot.get("updated_at"), push_available=False)
 
 
 @app.route("/api/notifications/start", methods=["POST"])
@@ -420,6 +362,77 @@ def notification_config():
 
 
 # ===========================================================================
+# PWA Push Notification API
+# ===========================================================================
+
+@app.route("/api/push/vapid-public-key", methods=["GET"])
+def push_vapid_key():
+    """Return the VAPID public key for client-side push subscription."""
+    key = push_notifications.get_vapid_public_key()
+    if not key:
+        return jsonify({"error": "VAPID keys not configured."}), 500
+    return jsonify({"publicKey": key})
+
+
+@app.route("/api/push/subscribe", methods=["POST"])
+def push_subscribe():
+    """Register a new push notification subscription."""
+    data = request.get_json()
+    if not data or not data.get("endpoint"):
+        return jsonify({"error": "Invalid subscription data."}), 400
+
+    data["session_hash"] = g.private_session["token_hash"]
+    data["session_expires_at"] = g.private_session["expires_at"]
+    is_new = push_notifications.add_subscription(data)
+    return jsonify({
+        "success": True,
+        "is_new": is_new,
+        "subscriptions": len(push_notifications.load_subscriptions()),
+    })
+
+
+@app.route("/api/push/unsubscribe", methods=["POST"])
+def push_unsubscribe():
+    """Remove a push notification subscription."""
+    data = request.get_json()
+    endpoint = data.get("endpoint", "") if data else ""
+    if not endpoint:
+        return jsonify({"error": "Endpoint required."}), 400
+
+    removed = push_notifications.remove_subscription(endpoint)
+    return jsonify({"success": True, "removed": removed})
+
+
+@app.route("/api/push/test", methods=["POST"])
+def push_test():
+    """Send a test push notification to all registered devices."""
+    try:
+        result = push_notifications.send_test_push_notification()
+        return jsonify({"success": True, **result})
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to send test push: {str(e)}"}), 500
+
+
+@app.route("/api/push/status", methods=["GET"])
+def push_status():
+    """Check push notification configuration status."""
+    subs = push_notifications.load_subscriptions()
+    has_vapid = bool(push_notifications.get_vapid_public_key())
+    return jsonify({
+        "configured": has_vapid,
+        "subscriptions": len(subs),
+        "devices": [
+            {
+                "endpoint_short": s.get("endpoint", "")[:60] + "...",
+                "created_at": s.get("created_at"),
+            }
+            for s in subs
+        ],
+    })
+
+
+# ===========================================================================
 # Health / Cron Endpoints
 # ===========================================================================
 
@@ -459,12 +472,6 @@ def telegram_webhook():
 @app.route("/api/cron/check", methods=["GET", "POST"])
 def cron_check():
     """Endpoint for external cron services to trigger a transaction check."""
-    cron_secret = os.getenv("CRON_SECRET", "")
-    if cron_secret:
-        provided = request.args.get("secret", "") or (request.get_json() or {}).get("secret", "")
-        if provided != cron_secret:
-            return jsonify({"error": "Invalid secret"}), 403
-
     api_claim = _get_env("PLUXEE_API_CLAIM")
     card_id = _get_env("PLUXEE_CARD_ID")
     benefit_id = _get_env("PLUXEE_BENEFIT_ID")

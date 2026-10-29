@@ -1,72 +1,62 @@
-name: Pluxee Monitor & GitHub Pages
-
+﻿name: Private Monitor and Public Demo
 on:
   schedule:
-    # Run every 15 minutes (off-peak minutes :03, :18, :33, :48 to avoid queue congestion)
-    - cron: '3,18,33,48 * * * *'
-  workflow_dispatch: {} # Allows manual trigger from GitHub Actions tab
+    - cron: "3,18,33,48 * * * *"
+  workflow_dispatch: {}
   push:
-    branches: [ master ]
-    paths-ignore:
-      - 'data/**'
-      - 'static/data.json'
-      - 'README.md'
-
+    branches: [master]
 permissions:
-  contents: write
-  pages: write
-  id-token: write
-
+  contents: read
 concurrency:
-  group: 'pluxee-monitor'
+  group: pluxee-monitor
   cancel-in-progress: false
-
 jobs:
-  check-and-deploy:
+  monitor:
     runs-on: ubuntu-latest
+    if: github.event_name != 'push' && vars.ENABLE_PRIVATE_MONITOR == 'true'
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run Pluxee Monitor (Check & Notify)
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Check transactions using private cloud state
         env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          DASHBOARD_OWNER_ID: ${{ secrets.DASHBOARD_OWNER_ID }}
           PLUXEE_API_CLAIM: ${{ secrets.PLUXEE_API_CLAIM }}
           PLUXEE_CARD_ID: ${{ secrets.PLUXEE_CARD_ID }}
           PLUXEE_BENEFIT_ID: ${{ secrets.PLUXEE_BENEFIT_ID }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          test -n "$SUPABASE_URL" && test -n "$SUPABASE_SECRET_KEY" && test -n "$DASHBOARD_OWNER_ID" || { echo 'Configure private Supabase storage before enabling monitoring.'; exit 1; }
           python monitor.py --once
-
-      - name: Commit updated state to repository
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add -f data/transactions.json static/data.json || git add static/data.json || true
-          git diff --staged --quiet || (git commit -m "chore: update transaction state [skip ci]" && git push) || true
-
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Prepare site directory
-        run: |
-          mkdir -p _site
-          cp -r static/* _site/
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      # Private state stays in Supabase. Never commit runtime data or upload it as an artifact.
+  demo:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          path: '_site'
-
-      - name: Deploy to GitHub Pages
+          python-version: "3.11"
+      - name: Build demo from public asset allowlist
+        env:
+          PRIVATE_APP_URL: ${{ vars.PRIVATE_APP_URL }}
+        run: python scripts/build_demo.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
         id: deployment
-        uses: actions/deploy-pages@v4

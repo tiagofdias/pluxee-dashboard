@@ -12,16 +12,26 @@ services:
         value: "true"
       - key: POLL_INTERVAL_SECONDS
         value: "60"
+      - key: KEEPALIVE_MODE
+        value: "smart"
       - key: PLUXEE_API_CLAIM
-        sync: false  # Set manually in Render dashboard
+        sync: false # Set manually in Render dashboard
       - key: PLUXEE_CARD_ID
-        value: "bHnxCGNGTfJEdgXDz4paOPlcAr6fOsEDgIgkE84nDT8%3DslEA7yYOHkT0tOM3"
+        sync: false
       - key: PLUXEE_BENEFIT_ID
-        value: "Fjzuh5HrgzFxK%2FWm9BXIAQ%3D%3DX0kllae3G4hK4L3I"
+        sync: false
       - key: TELEGRAM_TOKEN
         sync: false
       - key: TELEGRAM_CHAT_ID
         sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
       - key: CRON_SECRET
-        generateValue: true  # Auto-generate a random secret for cron protection
+        generateValue: true # Auto-generate a random secret for cron protection
+      - key: APP_ORIGIN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
     healthCheckPath: /ping
