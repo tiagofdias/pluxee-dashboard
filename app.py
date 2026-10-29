@@ -51,6 +51,7 @@ def protect_responses(response):
 @app.get("/login.js")
 @app.get("/demo-data.js")
 @app.get("/login.css")
+@app.get("/login-redirect.js")
 def public_javascript():
     return send_from_directory("static", request.path.lstrip("/"))
 

@@ -66,7 +66,7 @@ def check_private_request():
         return jsonify(error='Este ficheiro não é público.'), 404
     if path.startswith('/static/'):
         asset = path.removeprefix('/static/')
-        public = {'style.css', 'login.css', 'app.js', 'auth.js', 'login.js', 'demo-data.js', 'manifest.json', 'sw.js', 'login.html'}
+        public = {'style.css', 'login.css', 'app.js', 'auth.js', 'login.js', 'login-redirect.js', 'demo-data.js', 'manifest.json', 'sw.js', 'login.html'}
         if asset == 'index.html':
             return redirect('/')
         if asset not in public and not (asset.startswith('icons/') and '..' not in asset):

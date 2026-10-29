@@ -83,8 +83,10 @@ python scripts/build_demo.py --output _site
 O destino tem de estar vazio. A compilação usa uma lista explícita de ficheiros
 públicos e não copia dados de runtime, `.env`, APK ou código descompilado.
 O GitHub Pages aloja apenas essa demo; o login privado requer o backend Flask.
-A variável opcional `PRIVATE_APP_URL` liga o botão Entrar à origem HTTPS do backend.
-Sem essa variável, a demo inclui uma página de login informativa sem backend.
+A origem do backend está definida em `public-site.json`. A variável opcional
+`PRIVATE_APP_URL` permite substituí-la no build. O botão Entrar e o antigo endereço
+`login.html` encaminham para o login no Render. O artefacto estático não inclui
+formulários de password nem tenta chamar `/api/auth` no GitHub Pages.
 
 ## Monitor pessoal separado — opcional
 
