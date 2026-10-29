@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-10-28T14:25:49.390161+00:00",
+  "updated_at": "2026-10-29T11:24:59.707960+00:00",
   "balance": {
-    "lunch_pass": 230.87,
+    "lunch_pass": 208.77,
     "eco_pass": 0.0,
     "gift_pass": 0.0,
     "conso_pass": 0.0
@@ -38,26 +38,6 @@
       "is_rejected": false
     },
     {
-      "date": "27/10/2026",
-      "description": "BASUKU",
-      "amount": -5.5,
-      "balance": 28.64,
-      "currency": "EUR",
-      "effective_date": "27/10/2026",
-      "raw_description": "Compra  BASUKU,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "27/10/2026",
-      "description": "CAMADA FRANCESINHAS",
-      "amount": -16.6,
-      "balance": 28.64,
-      "currency": "EUR",
-      "effective_date": "27/10/2026",
-      "raw_description": "Compra  CAMADA FRANCESINHAS,FAFE,PRT",
-      "is_rejected": false
-    },
-    {
       "date": "20/10/2026",
       "description": "REST NAO BURGER",
       "amount": -15.0,
@@ -65,16 +45,6 @@
       "currency": "EUR",
       "effective_date": "21/10/2026",
       "raw_description": "Compra REST NAO BURGER,LISBOA,PRT",
-      "is_rejected": false
-    },
-    {
-      "date": "20/10/2026",
-      "description": "REST NAO BURGER",
-      "amount": -15.0,
-      "balance": 43.64,
-      "currency": "EUR",
-      "effective_date": "20/10/2026",
-      "raw_description": "Compra  REST NAO BURGER,LISBOA,PRT",
       "is_rejected": false
     },
     {
