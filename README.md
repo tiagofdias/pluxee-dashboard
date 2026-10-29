@@ -4,6 +4,13 @@ Dashboard em Flask para o cartão refeição Pluxee Portugal. O login usa o mesm
 **email e palavra-passe da app**, sem registo de outra conta e **sem base de dados**.
 A demonstração pública usa dados fictícios e não faz pedidos à API privada.
 
+## Android
+
+A aplicação nativa está em [`android/`](android/README.md): login direto, dashboard,
+biometria opcional, demonstração e notificações de movimentos com verificações no
+dispositivo. Não precisa de base de dados na cloud. Os alertas usam WorkManager
+(cerca de 15 minutos, sujeitos às restrições de bateria do Android).
+
 ## Utilização
 
 ```powershell

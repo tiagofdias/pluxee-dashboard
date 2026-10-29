@@ -36,3 +36,13 @@ _site/
 *.apks
 *.har
 pluxee-login*.json
+
+# Android local tools, builds and signing material
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore
+*.hprof
